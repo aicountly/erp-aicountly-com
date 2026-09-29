@@ -64,7 +64,7 @@ trait ReportingPresenters
      *
      * @return array{0:float,1:float} [opening, closing]
      */
-    protected function stockFigures(string $from, string $to, int $consolidated, bool $cumulative): array
+    public function stockFigures(string $from, string $to, int $consolidated, bool $cumulative): array
     {
         $key = $from . '|' . $to . '|' . $consolidated . '|' . (int)$cumulative;      // the stock walk is expensive: once per request
         if (!isset($this->stockMemo[$key])) {
