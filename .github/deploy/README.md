@@ -8,6 +8,7 @@ Logic: [`deploy.sh`](deploy.sh) · Exclusions: [`rsync-excludes.txt`](rsync-excl
 | Rule | How it is enforced |
 | --- | --- |
 | `.env`, `.htaccess`, `vendor`, `public`, `writable` are **never** copied, overwritten or deleted | `rsync-excludes.txt`, plus an independent checker that aborts the run if any of them appears in the transfer list |
+| The folders of the other projects in the web root (`aisonode`, `app_old`, `erp3-accounts-xml-export`, `erp3-voucher-verification`) and the unused `app/Views/grpcomp` are **never** copied, overwritten or deleted either | same two layers; root-anchored exact paths |
 | Files that exist only on production are preserved | rsync is never run with `--delete` (and `--max-delete=0` turns an accidental `--delete` into a hard failure) |
 | Existing files keep their permissions/owner/timestamps | `--no-perms --no-owner --no-group --no-times`; new files get `644`, new dirs `755` |
 | Nothing is lost when a file is overwritten | overwritten files are moved to `~/erp-deploy-backups/<UTC-stamp>-<sha>/` on the server (outside the web root) together with a `DEPLOY-LOG.txt` |
@@ -15,7 +16,12 @@ Logic: [`deploy.sh`](deploy.sh) · Exclusions: [`rsync-excludes.txt`](rsync-excl
 | No secrets in the repo or in logs | SSH key, host, user, port and path come from GitHub secrets, are only written to `$RUNNER_TEMP` (mode 600) and deleted at the end; each secret is visible only to the steps that need it (the private key to two); no third-party actions; no shell tracing; the workflow token can only read the repository |
 | Wrong server / wrong directory is refused | a real deploy needs the server's host key pinned (`PROD_SSH_KNOWN_HOSTS`); the target must already exist and contain `index.php` and `app/Config/Paths.php` |
 
-Additional protective excludes (beyond the five requested): `/.user.ini` and `/php.ini` (cPanel-managed PHP settings), `.git` and `/.github/` (never publish repository internals in a web-served directory). Remove a line from `rsync-excludes.txt` and from `required_rules` in `deploy.sh` if you ever want to deploy them.
+Additional protective excludes (beyond the five first requested): `/.user.ini` and `/php.ini` (cPanel-managed PHP settings), `.git` and `/.github/` (never publish repository internals in a web-served directory). Remove a line from `rsync-excludes.txt` and from `required_rules` in `deploy.sh` if you ever want to deploy them.
+
+Later additions, requested by the owner:
+
+* `/aisonode/`, `/app_old/`, `/erp3-accounts-xml-export/`, `/erp3-voucher-verification/` — other projects that live in the same web root. None of them is in this repository, so a deployment could never have uploaded them and never deletes them; the rules keep it that way even if a folder of that name is ever added to the repository, or `--delete` were ever added. Root only: a folder of the same name deeper in the tree (say `app/Libraries/app_old/`) is ordinary ERP code and still deploys.
+* `/app/Views/grpcomp/` — the group-company views, which are not in use. **Exactly that path.** The group-company controllers (`app/Controllers/Grpcomp`) and models (`app/Models/Grpcomp`), `app/Views/includes/grpcomp`, and any other folder that merely has the same name still deploy. Nothing in `app/Views/grpcomp` is uploaded, created or removed; whatever is there on the server stays as it is.
 
 Consequences worth knowing:
 

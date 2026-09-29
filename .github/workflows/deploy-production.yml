@@ -20,6 +20,8 @@ name: Deploy to production (cPanel)
 #
 # Never copied, overwritten or deleted on the server:
 #   .env  .htaccess  vendor  public  writable      (see .github/deploy/rsync-excludes.txt)
+#   aisonode  app_old  erp3-accounts-xml-export  erp3-voucher-verification   (other projects in the web root)
+#   app/Views/grpcomp                                                        (unused group-company views)
 # rsync is never run with --delete, so files that exist only on production survive.
 on:
   workflow_dispatch:

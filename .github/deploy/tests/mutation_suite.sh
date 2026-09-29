@@ -31,12 +31,13 @@ echo "--- baseline (must pass) ---"
 if bash "$SRC/deploy.sh" selftest >/dev/null 2>&1; then echo "baseline selftest: PASS"; else echo "baseline selftest: FAIL"; survivors=$((survivors+1)); fi
 
 echo "--- rule-removal mutants (guard bypassed; one per mandatory rule) ---"
-for rule in '.env' '.env.*' '.htaccess' '/vendor/' '/public/' '/writable/' '/.user.ini' '/php.ini' '.git' '/.github/'; do
+for rule in '.env' '.env.*' '.htaccess' '/vendor/' '/public/' '/writable/' '/.user.ini' '/php.ini' '.git' '/.github/' \
+  '/aisonode/' '/app_old/' '/erp3-accounts-xml-export/' '/erp3-voucher-verification/' '/app/Views/grpcomp/'; do
   run_mutant "drop_rule_$(echo "$rule" | tr -c 'A-Za-z0-9\n' '_')" '' "$rule"
 done
 
 echo "--- same removals with the guard ON (guard itself must reject) ---"
-for rule in '.env' '/vendor/' '/writable/'; do
+for rule in '.env' '/vendor/' '/writable/' '/aisonode/' '/app_old/' '/erp3-accounts-xml-export/' '/erp3-voucher-verification/' '/app/Views/grpcomp/'; do
   d="$SCR/mut_guard"; rm -rf "$d"; mkdir -p "$d"; cp "$SRC/deploy.sh" "$d/"; grep -vxF -- "$rule" "$SRC/rsync-excludes.txt" >"$d/rsync-excludes.txt"
   bash "$d/deploy.sh" selftest >/dev/null 2>&1 && { echo "guard let '$rule' removal through"; survivors=$((survivors+1)); } || echo "guard rejects removal of '$rule': ok"
 done
@@ -52,6 +53,23 @@ echo "--- option mutants ---"
 d="$SCR/mut_unanchored_vendor2"; rm -rf "$d"; mkdir -p "$d"; cp "$SRC/deploy.sh" "$d/"; sed 's#^/vendor/$#vendor/#' "$SRC/rsync-excludes.txt" >"$d/rsync-excludes.txt"
 sed -i -E 's/^  verify_exclude_file$/  :/' "$d/deploy.sh"
 bash "$d/deploy.sh" selftest >/dev/null 2>&1 && { echo "unanchored_vendor2: !!! SURVIVED"; survivors=$((survivors+1)); } || echo "unanchored_vendor2: caught"
+# the same for each other-project folder: unanchored, a rule would also swallow ERP code that shares the name
+for od in aisonode app_old erp3-accounts-xml-export erp3-voucher-verification; do
+  d="$SCR/mut_unanchored_$od"; rm -rf "$d"; mkdir -p "$d"; cp "$SRC/deploy.sh" "$d/"; sed "s#^/$od/\$#$od/#" "$SRC/rsync-excludes.txt" >"$d/rsync-excludes.txt"
+  sed -i -E 's/^  verify_exclude_file$/  :/' "$d/deploy.sh"
+  if cmp -s "$SRC/rsync-excludes.txt" "$d/rsync-excludes.txt"; then echo "unanchored_$od: INVALID MUTANT (nothing changed)"; survivors=$((survivors+1)); continue; fi
+  bash "$d/deploy.sh" selftest >/dev/null 2>&1 && { echo "unanchored_$od: !!! SURVIVED"; survivors=$((survivors+1)); } || echo "unanchored_$od: caught"
+done
+# app/Views/grpcomp must stay exactly that path. Two ways to get it wrong: a rule so short it swallows every
+# folder of that name (or all views), and a rule that swallows the neighbours' folders too.
+for variant in 'unanchored:grpcomp/' 'all_views:/app/Views/' 'any_depth_under_views:app/Views/**/grpcomp/'; do
+  name="${variant%%:*}"; repl="${variant#*:}"
+  d="$SCR/mut_grpcomp_$name"; rm -rf "$d"; mkdir -p "$d"; cp "$SRC/deploy.sh" "$d/"
+  awk -v r="$repl" '$0 == "/app/Views/grpcomp/" { print r; next } { print }' "$SRC/rsync-excludes.txt" >"$d/rsync-excludes.txt"
+  sed -i -E 's/^  verify_exclude_file$/  :/' "$d/deploy.sh"
+  if cmp -s "$SRC/rsync-excludes.txt" "$d/rsync-excludes.txt"; then echo "grpcomp_$name: INVALID MUTANT (nothing changed)"; survivors=$((survivors+1)); continue; fi
+  bash "$d/deploy.sh" selftest >/dev/null 2>&1 && { echo "grpcomp_$name: !!! SURVIVED"; survivors=$((survivors+1)); } || echo "grpcomp_$name: caught"
+done
 run_mutant delete_enabled       's/^  --max-delete=0$/  --delete/' ''
 run_mutant delete_with_guard    's/^  --max-delete=0$/  --delete --max-delete=0/' ''
 run_mutant perms_and_times      's/--no-perms --no-owner --no-group --no-times/--perms --times/' ''
@@ -64,6 +82,13 @@ run_mutant no_keep_dirlinks 's/ --keep-dirlinks//' ''
 run_mutant counter_only_local_fmt 's/\^\[<>\]f/^>f/g' ''
 run_mutant checker_ignores_push_fmt 's/\[<>ch\.\]\[fdLDS\]/[>ch.][fdLDS]/' ''
 run_mutant checker_neutered     's/^    if is_protected_path "\$path"; then$/    if false; then/' ''
+# the checker's regex for the other projects' folders, loosened in the two ways that would matter:
+run_mutant checker_other_no_terminator  '/aisonode\|app_old/ s/\)\(\/\|\$\)'"'"'/)'"'"'/' ''      # 'aisonode2/' would be flagged
+run_mutant checker_other_unanchored     '/aisonode\|app_old/ s/'"'"'\^\(aisonode/'"'"'(^|\/)(aisonode/' ''  # nested ERP code would be flagged
+# ...and the one for app/Views/grpcomp: without the terminator a look-alike (grpcomp_new) is flagged; widened to any
+# depth, app/Views/includes/grpcomp and app/Views/admin/grpcomp are flagged.
+run_mutant checker_grpcomp_no_terminator 's/'"'"'\^app\/Views\/grpcomp\(\/\|\$\)'"'"'/'"'"'^app\/Views\/grpcomp'"'"'/' ''
+run_mutant checker_grpcomp_any_depth     's/'"'"'\^app\/Views\/grpcomp\(\/\|\$\)'"'"'/'"'"'(^|\/)grpcomp(\/|$)'"'"'/' ''
 
 echo "--- checker-regex mutants (each protected_re entry removed; negative tests must notice) ---"
 for entry in \
@@ -71,7 +96,9 @@ for entry in \
   "'(^|/)\\.htaccess(/|\$)'" \
   "'(^|/)\\.git(/|\$)'" \
   "'^(vendor|public|writable|\\.github)(/|\$)'" \
-  "'^(\\.user\\.ini|php\\.ini)\$'"; do
+  "'^(\\.user\\.ini|php\\.ini)\$'" \
+  "'^(aisonode|app_old|erp3-accounts-xml-export|erp3-voucher-verification)(/|\$)'" \
+  "'^app/Views/grpcomp(/|\$)'"; do
   d="$SCR/mut_regex"; rm -rf "$d"; mkdir -p "$d"; cp "$SRC/rsync-excludes.txt" "$d/"
   grep -vF -- "  $entry" "$SRC/deploy.sh" >"$d/deploy.sh"
   if cmp -s "$SRC/deploy.sh" "$d/deploy.sh"; then echo "regex mutant $entry: INVALID (nothing removed)"; survivors=$((survivors+1)); continue; fi
