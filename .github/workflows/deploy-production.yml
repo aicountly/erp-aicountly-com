@@ -9,6 +9,15 @@ name: Deploy to production (cPanel)
 #   2. connects over SSH using the repository secrets and runs an rsync DRY RUN,
 #   3. only when "dry_run" is unticked, uploads the changes.
 #
+# Secrets (Settings > Secrets and variables > Actions; repository or "production" environment):
+#   PROD_SSH_HOST         server host name or IP        (a repository variable of the same name also works)
+#   PROD_SSH_PORT         SSH port                      (optional, default 22)
+#   PROD_SSH_USER         SSH user (the cPanel account)
+#   PROD_SSH_PRIVATE_KEY  private key, no passphrase
+#   PROD_SSH_REMOTE_ROOT  ERP web root: /home/USER/public_html, or relative to the SSH user's home
+#   PROD_SSH_KNOWN_HOSTS  pinned host key (ssh-keyscan output); optional for a dry run, REQUIRED for a real deploy
+# The earlier names (SSH_HOST, SSH_PORT, SSH_USER, SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS, DEPLOY_PATH) are still accepted.
+#
 # Never copied, overwritten or deleted on the server:
 #   .env  .htaccess  vendor  public  writable      (see .github/deploy/rsync-excludes.txt)
 # rsync is never run with --delete, so files that exist only on production survive.
@@ -73,28 +82,40 @@ jobs:
 
       - name: Validate that all required secrets are configured
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST || vars.PROD_SSH_HOST || secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER || secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.PROD_SSH_REMOTE_ROOT || secrets.DEPLOY_PATH }}
         run: |
           # Only checks presence; values are never printed.
           missing=0
-          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Required secret $name is not set (Settings > Secrets and variables > Actions). See .github/deploy/README.md."
+          need() {   # need <variable> <secret name to tell the user about>
+            if [ -z "${!1}" ]; then
+              echo "::error::Required secret $2 is not set (Settings > Secrets and variables > Actions). See .github/deploy/README.md."
               missing=1
             fi
-          done
+          }
+          need SSH_HOST PROD_SSH_HOST
+          need SSH_USER PROD_SSH_USER
+          need SSH_PRIVATE_KEY PROD_SSH_PRIVATE_KEY
+          need DEPLOY_PATH PROD_SSH_REMOTE_ROOT
+          if [ -z "$SSH_KNOWN_HOSTS" ]; then
+            if [ "$DRY_RUN" = "false" ]; then
+              echo "::error::A real deployment needs the server's host key pinned in PROD_SSH_KNOWN_HOSTS. Run a dry run first: it prints the fingerprints to verify and how to pin them (.github/deploy/README.md)."
+              missing=1
+            else
+              echo "::warning::PROD_SSH_KNOWN_HOSTS is not set. This dry run fetches the host key with ssh-keyscan (trust on first use) and prints its fingerprints: verify them, then pin the key (.github/deploy/README.md). A real deployment will not run without it."
+            fi
+          fi
           exit "$missing"
 
-      - name: Install the SSH key and the pinned server host key
+      - name: Install the SSH key and the server host key
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS || secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST || vars.PROD_SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT || secrets.SSH_PORT }}
         run: |
           set +x
           umask 077
@@ -103,21 +124,39 @@ jobs:
           chmod 700 "$ssh_dir"
           # tr strips CRs from values pasted on Windows; printf guarantees a final newline.
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$ssh_dir/id_deploy"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$ssh_dir/known_hosts"
-          chmod 600 "$ssh_dir/id_deploy" "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_deploy"
 
           # Must be a valid private key without a passphrase (nothing is printed).
           if ! ssh-keygen -y -P '' -f "$ssh_dir/id_deploy" >/dev/null 2>&1; then
-            echo "::error::SSH_PRIVATE_KEY is not a valid, passphrase-less private key. Paste the complete file including the BEGIN/END lines."
+            echo "::error::PROD_SSH_PRIVATE_KEY is not a valid, passphrase-less private key. Paste the complete file including the BEGIN/END lines."
             exit 1
           fi
 
-          # The pinned host keys must contain an entry for the configured host and port.
           port="${SSH_PORT:-22}"
           if [ "$port" = "22" ]; then lookup="$SSH_HOST"; else lookup="[$SSH_HOST]:$port"; fi
-          if ! ssh-keygen -F "$lookup" -f "$ssh_dir/known_hosts" >/dev/null 2>&1; then
-            echo "::error::SSH_KNOWN_HOSTS has no host key for the configured SSH_HOST/SSH_PORT. Regenerate it with ssh-keyscan (see .github/deploy/README.md)."
-            exit 1
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            # Pinned host key: it must contain an entry for the configured host and port.
+            printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$ssh_dir/known_hosts"
+            chmod 600 "$ssh_dir/known_hosts"
+            if ! ssh-keygen -F "$lookup" -f "$ssh_dir/known_hosts" >/dev/null 2>&1; then
+              echo "::error::PROD_SSH_KNOWN_HOSTS has no host key for the configured PROD_SSH_HOST/PROD_SSH_PORT. Regenerate it with ssh-keyscan (see .github/deploy/README.md)."
+              exit 1
+            fi
+          else
+            # Only reachable for a dry run (the validation step refuses a real deployment without a pinned key).
+            if [ "$DRY_RUN" = "false" ]; then
+              echo "::error::A real deployment needs PROD_SSH_KNOWN_HOSTS."
+              exit 1
+            fi
+            if ! ssh-keyscan -p "$port" -T 15 -t ed25519,ecdsa,rsa "$SSH_HOST" > "$ssh_dir/known_hosts" 2>/dev/null || [ ! -s "$ssh_dir/known_hosts" ]; then
+              echo "::error::Could not fetch the server's host key with ssh-keyscan. Check PROD_SSH_HOST / PROD_SSH_PORT and that the server accepts SSH from GitHub's runners."
+              exit 1
+            fi
+            chmod 600 "$ssh_dir/known_hosts"
+            echo "Host keys offered by the server (host name left out of the log):"
+            ssh-keygen -lf "$ssh_dir/known_hosts" | awk '{print "  " $1 " " $2 " " $NF}'
+            echo "Compare a fingerprint with cPanel > Security > SSH Access, or on the server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub"
+            echo "Then pin the key as the secret PROD_SSH_KNOWN_HOSTS (command in .github/deploy/README.md)."
           fi
 
       - name: Self-test the exclusion rules (local simulation, no network)
@@ -125,10 +164,10 @@ jobs:
 
       - name: Plan - rsync dry run against production (transfers nothing)
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST || vars.PROD_SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT || secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER || secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PROD_SSH_REMOTE_ROOT || secrets.DEPLOY_PATH }}
           SSH_KEY_FILE: ${{ runner.temp }}/deploy-ssh/id_deploy
           SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/deploy-ssh/known_hosts
         run: bash .github/deploy/deploy.sh plan
@@ -136,10 +175,10 @@ jobs:
       - name: Apply - upload the changes to production
         if: ${{ inputs.dry_run == false }}
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST || vars.PROD_SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT || secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER || secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PROD_SSH_REMOTE_ROOT || secrets.DEPLOY_PATH }}
           SSH_KEY_FILE: ${{ runner.temp }}/deploy-ssh/id_deploy
           SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/deploy-ssh/known_hosts
         run: bash .github/deploy/deploy.sh apply

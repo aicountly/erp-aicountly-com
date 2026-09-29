@@ -11,7 +11,9 @@
 #
 # Environment for plan / apply:
 #   SSH_HOST, SSH_USER   connection target
-#   DEPLOY_PATH          absolute path of the ERP web root on the server
+#   DEPLOY_PATH          ERP web root on the server: an absolute path (/home/<user>/public_html) or a folder
+#                        relative to the SSH user's home (public_html, ~/public_html); a relative
+#                        one is resolved by the server before any other check
 #   SSH_PORT             optional, default 22
 #   SSH_KEY_FILE         path to the (passphrase-less) private key file
 #   SSH_KNOWN_HOSTS_FILE path to the pinned known_hosts file
@@ -35,6 +37,9 @@ exclude_file="$here/rsync-excludes.txt"
 
 die()  { echo "::error::$*" >&2; exit 1; }
 note() { echo "==> $*"; }
+
+# An absolute web-root path: at least two components, safe characters only.
+abs_path_re='^/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$'
 
 cleanup_dirs=()
 cleanup() {
@@ -409,15 +414,32 @@ init_remote() {
   SSH_PORT="${SSH_PORT:-22}"
   DEPLOY_PATH="${DEPLOY_PATH%/}"
 
+  # A web root given relative to the SSH user's home ("public_html" or "~/public_html") is turned into an
+  # absolute path by the server in remote_preflight; the absolute-path rules then apply to the result.
+  deploy_path_relative=0
+  local tilde='~'                       # a literal "~" (nothing expands it); "~/x" means x under the SSH user's home
+  if [[ $DEPLOY_PATH == "$tilde"/* ]]; then
+    DEPLOY_PATH="${DEPLOY_PATH#"$tilde"/}"
+    deploy_path_relative=1
+  elif [[ $DEPLOY_PATH != /* ]]; then
+    deploy_path_relative=1
+  fi
+
   local port_re='^[0-9]{1,5}$' host_re='^[A-Za-z0-9._:-]+$' user_re='^[A-Za-z0-9._-]+$'
-  local path_re='^/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$' file_re='^/[A-Za-z0-9._/-]+$'
+  local path_re="$abs_path_re" rel_re='^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' file_re='^/[A-Za-z0-9._/-]+$'
   [[ $SSH_PORT =~ $port_re ]] && [ "$SSH_PORT" -ge 1 ] && [ "$SSH_PORT" -le 65535 ] \
     || die "SSH_PORT must be a number between 1 and 65535"
   # shellcheck disable=SC2153  # SSH_HOST is supplied by the caller's environment
   [[ $SSH_HOST =~ $host_re ]] || die "SSH_HOST contains unexpected characters"
   [[ $SSH_USER =~ $user_re ]] || die "SSH_USER contains unexpected characters"
-  [[ $DEPLOY_PATH =~ $path_re ]] \
-    || die "DEPLOY_PATH must be an absolute path with at least two components, e.g. /home/<cpanel-user>/public_html (letters, digits, . _ - and / only)"
+  if [ "$deploy_path_relative" -eq 1 ]; then
+    [[ $DEPLOY_PATH =~ $rel_re ]] \
+      || die "DEPLOY_PATH must be an absolute path such as /home/<cpanel-user>/public_html, or a folder relative to the SSH user's home such as public_html (letters, digits, . _ - and / only)"
+    case "/$DEPLOY_PATH/" in */./*) die "DEPLOY_PATH must not contain '.' path components" ;; esac
+  else
+    [[ $DEPLOY_PATH =~ $path_re ]] \
+      || die "DEPLOY_PATH must be an absolute path with at least two components, e.g. /home/<cpanel-user>/public_html (letters, digits, . _ - and / only)"
+  fi
   [[ $DEPLOY_PATH != *..* ]] || die "DEPLOY_PATH must not contain '..'"
   [[ $SSH_KEY_FILE =~ $file_re && -r $SSH_KEY_FILE ]] || die "SSH_KEY_FILE is not a readable absolute path"
   [[ $SSH_KNOWN_HOSTS_FILE =~ $file_re && -r $SSH_KNOWN_HOSTS_FILE ]] \
@@ -455,6 +477,20 @@ remote() { ssh -F "$ssh_config" deploy-target "$@"; }
 remote_preflight() {
   note "Checking SSH access and the target directory on production"
   local out status
+  if [ "${deploy_path_relative:-0}" -eq 1 ]; then
+    # Let the server say where the folder really is (pwd -P: symlinks resolved), then hold the result to
+    # the same rules as an absolute DEPLOY_PATH. Nothing is created.
+    local resolved
+    resolved="$(remote "cd -- '$DEPLOY_PATH' 2>/dev/null && pwd -P || echo NO_DIR")" \
+      || die "SSH connection to production failed. Check SSH_HOST, SSH_PORT, SSH_USER, the private key and SSH_KNOWN_HOSTS."
+    resolved="${resolved##*$'\n'}"
+    [ "$resolved" != NO_DIR ] \
+      || die "DEPLOY_PATH does not exist relative to the SSH user's home on the server (it is never created automatically)"
+    [[ $resolved =~ $abs_path_re && $resolved != *..* ]] \
+      || die "DEPLOY_PATH could not be resolved to a safe absolute path on the server"
+    DEPLOY_PATH="$resolved"
+    deploy_path_relative=0
+  fi
   out="$(remote "cd '$DEPLOY_PATH' 2>/dev/null || { echo NO_DIR; exit 0; }
 [ -w . ] || { echo NOT_WRITABLE; exit 0; }
 [ -f index.php ] || { echo NO_INDEX; exit 0; }
