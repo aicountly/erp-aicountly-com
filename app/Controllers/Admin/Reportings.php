@@ -51,7 +51,7 @@ class Reportings extends BaseController{
             'to_date'       => $p['to_date'],
             'consolidated'  => $p['consolidated'],
             'export_qs'     => ReportParams::toQuery($p),
-            'recon_notes'   => $this->ReportingModel->reconciliationNotes($p['from_date'], $p['to_date'], $p['consolidated'], 'The Balance Sheet'),
+            'recon_notes'   => $this->ReportingModel->reportNotes('balance_sheet', $p['from_date'], $p['to_date'], $p['consolidated']),
         ];
      return view($this->folder_path . ($p['format'] === 2 ? 'reports/balance_sheet_vertical' : 'reports/balance_sheet_horizontal'), $data);
     }
@@ -70,7 +70,7 @@ class Reportings extends BaseController{
 		$data['response']        = $response; 	
 		$data['consolidated']    = $p['consolidated']; 
 		$data['export_qs']       = ReportParams::toQuery($p);
-		$data['recon_notes']     = $this->ReportingModel->reconciliationNotes($p['from_date'], $p['to_date'], $p['consolidated'], 'The Trial Balance');
+		$data['recon_notes']     = $this->ReportingModel->reportNotes('trial_balance', $p['from_date'], $p['to_date'], $p['consolidated']);
         return view($this->folder_path.'reports/trial_balance',$data);
     }
 	
@@ -89,6 +89,7 @@ class Reportings extends BaseController{
 			'bo_id'         => $this->bo_id,
 			'consolidated'  => $p['consolidated'],
 			'export_qs'     => ReportParams::toQuery($p),
+			'recon_notes'   => $this->ReportingModel->reportNotes('profit_loss', $p['from_date'], $p['to_date'], $p['consolidated']),
 			];
         
          return view($this->folder_path . ($p['format'] === 2 ? 'reports/profit_loss_vertical' : 'reports/profit_loss_horizontal'), $data);

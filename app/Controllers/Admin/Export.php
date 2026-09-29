@@ -155,7 +155,7 @@ private function stripPrefixSymbols(string $str): string
  | The parameters are normalised by ReportParams and the rows come from the model's load_*_view()
  | dispatchers - exactly the two calls Reportings.php makes for the page - so the file contains the
  | rows the page shows, cell for cell. ReportSheetWriter only lays them out: it computes no amount.
- | When the ledger itself is out of balance the file says so under the report (reconciliationNotes),
+ | When the ledger itself is out of balance the file says so under the report (reportNotes),
  | with the figures taken from the ledger; nothing is adjusted to make a report tally.
  */
 
@@ -191,7 +191,7 @@ public function balance_sheet()
         'detail'     => $p['view'] === 2,
         'sheet'      => 'Balance Sheet',
         'csv'        => $p['export'] === 'csv',
-        'notes'      => $this->ReportingModel->reconciliationNotes($p['from_date'], $p['to_date'], $p['consolidated'], 'The Balance Sheet'),
+        'notes'      => $this->ReportingModel->reportNotes('balance_sheet', $p['from_date'], $p['to_date'], $p['consolidated']),
     ];
     $book = ($p['format'] === 2)
         ? ReportSheetWriter::vertical($rows, $opt)
@@ -213,7 +213,7 @@ public function profit_loss()
         'detail'     => $p['view'] === 2,
         'sheet'      => 'Profit & Loss',
         'csv'        => $p['export'] === 'csv',
-        'notes'      => [],
+        'notes'      => $this->ReportingModel->reportNotes('profit_loss', $p['from_date'], $p['to_date'], $p['consolidated']),
     ];
     $book = ($p['format'] === 2)
         ? ReportSheetWriter::vertical($rows, $opt)
@@ -233,7 +233,7 @@ public function trial_balance()
                       . ($p['consolidated'] ? '  |  Consolidated' : ''),
         'sheet'    => 'Trial Balance',
         'csv'      => $p['export'] === 'csv',
-        'notes'    => $this->ReportingModel->reconciliationNotes($p['from_date'], $p['to_date'], $p['consolidated'], 'The Trial Balance'),
+        'notes'    => $this->ReportingModel->reportNotes('trial_balance', $p['from_date'], $p['to_date'], $p['consolidated']),
     ];
     ReportSheetWriter::deliver(ReportSheetWriter::trialBalance($rows, $opt), 'TrialBalance_' . $viewName, $p['export']);
 }

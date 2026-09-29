@@ -130,6 +130,8 @@
   
 </div>
 
+<?= view('admin/reports/_recon_notes', ['notes' => $recon_notes ?? []]) ?>
+
 <div class="modal fade mt-5 modal-lg" id="calendermodal" tabindex="-1" aria-labelledby="calendermodallabel" style="display: none;" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

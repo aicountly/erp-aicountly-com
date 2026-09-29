@@ -40,6 +40,9 @@ trait ReportingPresenters
         return $this->engineInstance;
     }
 
+    /** @var array<string,array{0:float,1:float}> */
+    private array $stockMemo = [];
+
     /** grpparentn names by category id (one query per request). */
     protected function parentNames(): array
     {
@@ -63,9 +66,13 @@ trait ReportingPresenters
      */
     protected function stockFigures(string $from, string $to, int $consolidated, bool $cumulative): array
     {
-        $closing = (float)$this->StockStatusModel->closingStockTotal($from, $to, ['consolidated' => $consolidated]);
-        $opening = $this->openingStockFigure($cumulative ? $this->engine()->fyStart() : $from, $consolidated);
-        return [$opening, round($closing, 2)];
+        $key = $from . '|' . $to . '|' . $consolidated . '|' . (int)$cumulative;      // the stock walk is expensive: once per request
+        if (!isset($this->stockMemo[$key])) {
+            $closing = (float)$this->StockStatusModel->closingStockTotal($from, $to, ['consolidated' => $consolidated]);
+            $opening = $this->openingStockFigure($cumulative ? $this->engine()->fyStart() : $from, $consolidated);
+            $this->stockMemo[$key] = [$opening, round($closing, 2)];
+        }
+        return $this->stockMemo[$key];
     }
 
     /** Opening stock as at a date (FY start = the itmoppyval total), scoped like the ledgers. */
@@ -885,22 +892,59 @@ trait ReportingPresenters
             : $this->load_profit_loss_horizontal($view, $from_date, $to_date, $nil_type, $consolidated);
     }
 
-    /** Lines that explain, from the ledger, why a Balance Sheet / Trial Balance does not tally (empty when it does). */
-    public function reconciliationNotes($from_date, $to_date, int $consolidated, string $what): array
+    /**
+     * Notes printed under a report (banner on the page, rows under the Excel/CSV), taken from the ledger:
+     *   warn - the ledger itself is out of balance (real, posted data) and by how much / which vouchers;
+     *   info - facts about the stored data that explain lines of the report.
+     * Nothing here changes a figure; an empty list means there is nothing to say.
+     *
+     * @param string $report 'balance_sheet' | 'trial_balance' | 'profit_loss'
+     * @return array<int,array{level:string,text:string}>
+     */
+    public function reportNotes(string $report, $from_date, $to_date, int $consolidated): array
     {
-        $rec = $this->reconciliation($from_date, $to_date, $consolidated);
-        $imb = (float)$rec['ledger_imbalance'];
-        if (abs($imb) < 0.005) { return []; }
-        $fmt = static fn(float $n) => number_format(abs($n), 2, '.', ',') . ($n < 0 ? ' Cr' : ' Dr');
-        $notes = [sprintf(
-            '%s does not tally because the ledger itself is out of balance: total debit minus total credit of all posted entries (FY start to %s) = %s.',
-            $what, date('d-m-Y', strtotime((string)$to_date)), $fmt($imb)
-        )];
-        if (abs($rec['gst_paid_journals']) >= 0.005) {
-            $notes[] = 'Of this, GST PAID A/C system journals (composition scheme, posted as a single debit row): ' . $fmt($rec['gst_paid_journals']) . '.';
+        $eng   = $this->engine();
+        $s     = $eng->snapshot((string)$from_date, (string)$to_date, (bool)$consolidated);
+        $fmt   = static fn(float $n) => number_format(abs($n), 2, '.', ',') . ($n < 0 ? ' Cr' : ' Dr');
+        $label = ['balance_sheet' => 'The Balance Sheet', 'trial_balance' => 'The Trial Balance'][$report] ?? '';
+        $notes = [];
+
+        if ($report !== 'profit_loss') {
+            $rec = $this->reconciliation($from_date, $to_date, $consolidated);
+            $imb = (float)$rec['ledger_imbalance'];
+            if (abs($imb) >= 0.005) {
+                $notes[] = ['level' => 'warn', 'text' => sprintf(
+                    '%s does not tally because the ledger itself is out of balance: total debit minus total credit of all posted entries (FY start to %s) = %s.',
+                    $label, date('d-m-Y', strtotime((string)$to_date)), $fmt($imb))];
+                if (abs($rec['gst_paid_journals']) >= 0.005) {
+                    $notes[] = ['level' => 'warn', 'text' => 'Of this, GST PAID A/C system journals (composition scheme, posted as a single debit row): ' . $fmt($rec['gst_paid_journals']) . '.'];
+                }
+                if (abs($rec['other']) >= 0.005) {
+                    $notes[] = ['level' => 'warn', 'text' => 'Of this, other vouchers whose debit and credit rows differ (e.g. approval pending on one leg only): ' . $fmt($rec['other']) . '.'];
+                }
+            }
+            [$opStock] = $this->stockFigures($s->from, $s->to, $consolidated, true);
+            $od = round($eng->openingTotal($s) + $opStock, 2);
+            if (abs($od) > 0.01) {
+                $notes[] = ['level' => 'info', 'text' => sprintf(
+                    "'Difference in Opening': the opening balances stored for this financial year (all ledgers plus opening stock) do not net to zero - they net to %s.", $fmt($od))];
+            }
         }
-        if (abs($rec['other']) >= 0.005) {
-            $notes[] = 'Of this, other vouchers whose debit and credit rows differ (e.g. approval pending on one leg only): ' . $fmt($rec['other']) . '.';
+
+        $n = 0; $sum = 0.0;
+        foreach ($s->accounts as $a) {
+            if (AccountingEngine::isPlCat((int)$a['cat']) && abs((float)$a['op']) >= 0.005) { $n++; $sum += (float)$a['op']; }
+        }
+        if ($n > 0) {
+            $one  = $n === 1;
+            $what = $report === 'profit_loss'
+                ? ($one ? "it is not part of this year's result" : "they are not part of this year's result")
+                : ($one ? "it is shown as 'Profit & Loss b/f (opening)' and is part of 'Difference in Opening'"
+                        : "they are shown as 'Profit & Loss b/f (opening)' and are part of 'Difference in Opening'");
+            $notes[] = ['level' => 'info', 'text' => sprintf(
+                "%s (net %s). Profit & loss accounts start every year at zero and the application does not accept opening balances for them, so %s written by another routine (typically the year-end carry-forward); %s.",
+                $n === 1 ? '1 profit & loss ledger carries an opening balance' : $n . ' profit & loss ledgers carry opening balances',
+                $fmt(round($sum, 2)), $n === 1 ? 'this was' : 'these were', $what)];
         }
         return $notes;
     }

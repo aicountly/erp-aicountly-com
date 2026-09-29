@@ -670,6 +670,10 @@ class FYModel extends Model	{
 	// ✅ FIX: net profit/loss
 	$profitLossValue = $profitValue - $lossValue; // + = profit, - = loss
 
+	// accoppybal / accttxnmst use debit = +, credit = -. A profit is a CREDIT balance of the appropriation
+	// account (it was stored as a debit, which left the new year's opening balances out by twice the profit).
+	$openingPL = -$profitLossValue;
+
 	// Upsert opening in new FY for P&L Appropriation
 	$opening_exists = $this->db->table('accoppybal')->where([
 		'cmp_id'        => $this->comp_id,
@@ -686,7 +690,7 @@ SaveErrorLog("Profit loss id: -> ".$plAccId);
 			'acc_id'        => $plAccId,
 			'hobo_id'       => $this->bo_id
 		])->update([
-			'acc_op_bal'   => $profitLossValue,
+			'acc_op_bal'   => $openingPL,
 			'acc_py_bal'   => 0,
 			'hobo_id'      => $this->bo_id ?? 0,
 			'acc_memo_bal' => 0
@@ -696,7 +700,7 @@ SaveErrorLog("Profit loss id: -> ".$plAccId);
 			'cmp_id'        => $this->comp_id,
 			'cmpfymastr_id' => $newFYid,
 			'acc_id'        => $plAccId,
-			'acc_op_bal'    => $profitLossValue,
+			'acc_op_bal'    => $openingPL,
 			'acc_py_bal'    => 0,
 			'hobo_id'       => $this->bo_id ?? 0,
 			'acc_memo_bal'  => 0
@@ -709,8 +713,8 @@ SaveErrorLog("Profit loss id: -> ".$plAccId);
 		'cmp_id'        => $this->comp_id,
 		'acc_id'        => $plAccId,
 		'acc_txn_date'  => $fy_from_date,
-		'acc_txn_dr_cr' => ($profitLossValue >= 0) ? 1 : 2,
-		'acc_txn_amt'   => abs($profitLossValue),
+		'acc_txn_dr_cr' => ($openingPL >= 0) ? 1 : 2,
+		'acc_txn_amt'   => abs($openingPL),
 		'acc_txn_fcy'   => 0,
 		'vch_txn_id'    => 0,
 		'txn_id'        => 0,
@@ -2955,9 +2959,14 @@ public function update_fy_account_balance(int $accId, $common): array
         }
 
         // 4) What to carry forward into NEXT FY opening for P&L Appropriation
-        //    - If PL Acc exists in curr FY => (closingPL + netProfitLoss)
-        //    - Else => only netProfitLoss
-        $carryForwardPL = ($plExistsInCurr ? ($closingPL + $netProfitLoss) : $netProfitLoss);
+        //    Everything here is debit = +, credit = - (the sign accoppybal.acc_op_bal uses):
+        //    - closingPL is the account's own closing balance (a credit balance is negative)
+        //    - netProfitLoss is + for a profit, and a profit is a CREDIT, so it is subtracted
+        //    - If PL Acc exists in curr FY => closingPL - netProfitLoss
+        //    - Else => only - netProfitLoss
+        //    (It used to add closingPL to netProfitLoss and negate the sum, which reversed the sign of the
+        //     accumulated balance: two years of profit 210 and 170 carried a DEBIT of 40 instead of a credit of 380.)
+        $carryForwardPL = ($plExistsInCurr ? $closingPL : 0.0) - $netProfitLoss;
 
         SaveErrorLog(
             "{$logPrefix} P&L Appropriation ensure-nextFY | plExistsInCurr=" . ($plExistsInCurr ? '1' : '0') .
@@ -3050,8 +3059,8 @@ public function update_fy_account_balance(int $accId, $common): array
                 'acc_id'        => $plAccId,
                 'hobo_id'       => $hoboId
             ])->update([
-                'acc_op_bal'   => ($carryForwardPL < 0 ) ? abs($carryForwardPL):-$carryForwardPL,
-                'acc_py_bal'   => ($carryForwardPL < 0 ) ? abs($carryForwardPL):-$carryForwardPL,
+                'acc_op_bal'   => $carryForwardPL,
+                'acc_py_bal'   => $carryForwardPL,
                 'acc_memo_bal' => 0
             ]);
             SaveErrorLog("{$logPrefix} P&L Appropriation nextFY opening UPDATED | plAccId={$plAccId} bal={$carryForwardPL}");
@@ -3060,8 +3069,8 @@ public function update_fy_account_balance(int $accId, $common): array
                 'cmp_id'        => $cmpId,
                 'cmpfymastr_id' => $nextFYid,
                 'acc_id'        => $plAccId,
-                'acc_op_bal'    => ($carryForwardPL < 0 ) ? abs($carryForwardPL):-$carryForwardPL,
-                'acc_py_bal'    => ($carryForwardPL < 0 ) ? abs($carryForwardPL):-$carryForwardPL,
+                'acc_op_bal'    => $carryForwardPL,
+                'acc_py_bal'    => $carryForwardPL,
                 'hobo_id'       => $hoboId,
                 'acc_memo_bal'  => 0
             ]);
@@ -3098,8 +3107,11 @@ public function update_fy_account_balance(int $accId, $common): array
 
     $parent_id = (int) ($parentRow['crs_mst_parent_id'] ?? 0);
 
-    // Skip restricted P&L parent if needed
-    $restrictedParentIds = [6, 7, 8, 9, 12, 13];
+    // Profit & loss accounts start every year at zero: their result was carried into the appropriation
+    // account above. All eight profit & loss categories are skipped - the account screen refuses opening
+    // balances for exactly these ([6,7,8,9,10,11,12,13]); the list used to leave out 10 (Direct Income) and
+    // 11 (Purchase), whose closing balances were carried in as openings and left the opening balances unbalanced.
+    $restrictedParentIds = [6, 7, 8, 9, 10, 11, 12, 13];
     if (in_array($parent_id, $restrictedParentIds, true)) {
         SaveErrorLog("{$logPrefix} acc_name=\"{$accName}\" | skipped due to restricted parent_id={$parent_id}");
         return $errors;

@@ -280,17 +280,27 @@ final class ReportSheetWriter
         $sh->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($rgb);
     }
 
-    /** Reconciliation lines (why the sheet does not tally), taken from the ledger, written under the report. */
+    /**
+     * Notes taken from the ledger (why the sheet does not tally, facts that explain a line), written under the report.
+     * Each note is ['level' => 'warn'|'info', 'text' => string]; a plain string is treated as 'warn'.
+     */
     private static function notes(Worksheet $sh, array $notes, int $row, string $lastCol): void
     {
-        $notes = array_values(array_filter($notes, static fn($n) => (string)$n !== ''));
-        if (!$notes) { return; }
-        foreach ($notes as $i => $n) {
+        $list = [];
+        foreach ($notes as $n) {
+            $n = is_array($n) ? $n : ['level' => 'warn', 'text' => (string)$n];
+            if ((string)($n['text'] ?? '') !== '') { $list[] = $n; }
+        }
+        $first = true;
+        foreach ($list as $i => $n) {
             $cell = 'A' . ($row + $i);
             $sh->mergeCells($cell . ':' . $lastCol . ($row + $i));
-            $sh->setCellValueExplicit($cell, (string)$n, DataType::TYPE_STRING);
-            $sh->getStyle($cell)->getFont()->setItalic(true)->getColor()->setRGB($i === 0 ? 'C00000' : '595656');
-            $sh->getStyle($cell)->getAlignment()->setWrapText(true);
+            $sh->setCellValueExplicit($cell, (string)$n['text'], DataType::TYPE_STRING);
+            $warn = ($n['level'] ?? 'warn') === 'warn';
+            $sh->getStyle($cell)->getFont()->setItalic(true)->setBold($warn && $first)->getColor()->setRGB($warn && $first ? 'C00000' : '595656');
+            $sh->getStyle($cell)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+            $sh->getRowDimension($row + $i)->setRowHeight(max(15, 15 * (int)ceil(strlen((string)$n['text']) / 95)));
+            if ($warn) { $first = false; }
         }
     }
 
