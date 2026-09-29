@@ -26,13 +26,17 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
  *   6  the corrected Trial Balance / Profit & Loss / Balance Sheet in every view, and the identities that must hold
  *   7  the previous (old) calculation next to the corrected one
  *   8  Excel / CSV parity: the workbooks are built and read back and compared with the rows the page shows
+ *
+ * Section 2 also groups each unbalanced voucher with the vouchers it is linked to (vchbridgen: a composition-scheme
+ * purchase / sale and its GST PAID A/C system journal) and reports what is still unbalanced as a group.
+ * --vouchers [N] / --voucher ID,ID print the ledger rows of such vouchers; --csv FILE lists all of them for the accountant.
  */
 class AuditBooks extends BaseCommand
 {
     protected $group       = 'Audit';
     protected $name        = 'audit:books';
     protected $description = 'Read-only audit of one company / financial year / branch: ledger integrity, year-end carry-forward, Trial Balance, Profit & Loss, Balance Sheet (old vs corrected) and Excel-vs-screen parity.';
-    protected $usage       = 'audit:books --list | audit:books --company ID --fy ID [--branch ID | --consolidated] [--to YYYY-MM-DD] [--limit N] [--json FILE] [--no-legacy] [--no-excel] [--no-continuity]';
+    protected $usage       = 'audit:books --list | audit:books --company ID --fy ID [--branch ID | --consolidated] [--to YYYY-MM-DD] [--limit N] [--json FILE] [--vouchers [N]] [--voucher ID,ID] [--csv FILE] [--no-legacy] [--no-excel] [--no-continuity]';
     protected $options     = [
         '--list'           => 'List companies, financial years, branches and ledger volume, then stop.',
         '--company'        => 'Company id (cmp_id).',
@@ -43,10 +47,17 @@ class AuditBooks extends BaseCommand
         '--to'             => 'Report date (default: FY end).',
         '--limit'          => 'Rows shown in each detail list (default 15).',
         '--json'           => 'Also write the findings to this JSON file.',
+        '--vouchers'       => 'Show, row by row, the N (default 3) largest vouchers that are still unbalanced after adding the vouchers they are linked to, and N that balance thanks to a link.',
+        '--voucher'        => 'Show the ledger rows, GST summary and linked vouchers of these voucher ids (comma separated).',
+        '--csv'            => 'Write every voucher whose debit and credit rows differ to this CSV file (with its linked vouchers and whether they balance together).',
         '--no-legacy'      => 'Skip the old-calculation comparison.',
         '--no-excel'       => 'Skip the Excel/CSV read-back test.',
         '--no-continuity'  => 'Skip the previous-year carry-forward check.',
     ];
+
+    /** vchbridgen link types that tie a voucher to its composition-scheme "GST PAID A/C" system journal (3 purchase, 4 sale, 5 credit note).
+     *  Types 1 and 2 (credit / debit note against an invoice) link vouchers that are NOT meant to balance each other and are never added together. */
+    private const COMPOSITION_LINKS = [3, 4, 5];
 
     /** @var \CodeIgniter\Database\BaseConnection */
     private $db;
@@ -121,6 +132,7 @@ class AuditBooks extends BaseCommand
             $this->header($fyRow);
             $this->guard('ledger', fn() => $this->checkLedger());
             $this->guard('vouchers', fn() => $this->checkVouchers());
+            if (is_string($this->opt('voucher')) && $this->opt('voucher') !== '') { $this->guard('voucher_detail', fn() => $this->checkVoucherIds((string)$this->opt('voucher'))); }
             $this->guard('structure', fn() => $this->checkStructure());
             $this->guard('openings', fn() => $this->checkOpenings());
             if ($this->opt('no-continuity') === null) { $this->guard('carry', fn() => $this->checkCarryForward()); }
@@ -329,6 +341,14 @@ class AuditBooks extends BaseCommand
         $this->heading('AUDIT (read only)  company ' . $this->cmp . '  fy ' . $this->fy . '  branch ' . ($this->cons ? 'ALL (consolidated)' : $this->bo));
         CLI::write("  financial year : {$this->fyStart} .. {$this->fyEnd}    report period: {$this->from} .. {$this->to}");
         CLI::write('  php ' . PHP_VERSION . '   database ' . $this->db->getPlatform() . '   default valuation method: ' . ($fyRow['def_val_method'] ?? '?'));
+        try {
+            $b = $this->univ()->table('hobomaster')->where('cmp_id', $this->cmp)->where('hobo_id', $this->bo)->get()->getRowArray();
+            if ($b && isset($b['hobo_gstin_type']) && $b['hobo_gstin_type'] !== '') {
+                $gt = (int)$b['hobo_gstin_type'];
+                CLI::write('  branch GST registration type: ' . $gt . ($gt === 2 ? ' (composition scheme: GST on purchases and sales is posted through "GST PAID A/C" system journals)' : ($gt === 1 ? ' (regular)' : '')));
+                $this->R['branch_gstin_type'] = $gt;
+            }
+        } catch (\Throwable $e) { /* the branch master is optional here */ }
         $this->R['meta'] = ['company' => $this->cmp, 'fy' => $this->fy, 'branch' => $this->cons ? 'all' : $this->bo, 'fy_start' => $this->fyStart, 'fy_end' => $this->fyEnd,
                             'from' => $this->from, 'to' => $this->to, 'generated' => date('c')];
     }
@@ -427,10 +447,16 @@ class AuditBooks extends BaseCommand
         $byType = [];
         foreach ($list as $v) { $k = (string)($v['vch_type_id'] ?? 'none'); $byType[$k]['n'] = ($byType[$k]['n'] ?? 0) + 1; $byType[$k]['diff'] = ($byType[$k]['diff'] ?? 0) + $v['diff']; $byType[$k]['abs'] = ($byType[$k]['abs'] ?? 0) + abs($v['diff']); }
         uasort($byType, fn($a, $b) => $b['abs'] <=> $a['abs']);
+        $all = $this->optional(fn() => $this->db->query(
+            "SELECT h.vch_type_id t, COUNT(*) n FROM vchtxnconso h
+              WHERE h.cmp_id = ? AND h.vch_txn_id IN (SELECT a.vch_txn_id FROM accttxnmst a WHERE a.cmp_id = ? AND a.acc_txn_type = 1 AND a.vch_txn_id > 0 AND a.acc_txn_date BETWEEN ? AND ? {$this->b()} GROUP BY a.vch_txn_id)
+              GROUP BY h.vch_type_id", [$this->cmp, $this->cmp, $this->fyStart, $this->to])->getResultArray());
+        $allBy = []; foreach ((array)$all as $r) { $allBy[(string)(int)$r['t']] = (int)$r['n']; }
         $tbl = [];
-        foreach ($byType as $k => $t) { $tbl[] = ['type' => $this->vt($k === 'none' ? null : (int)$k), '>vouchers' => $t['n'], '>net (Dr-Cr)' => $this->drcr($t['diff']), '>gross' => $this->n($t['abs'])]; }
-        CLI::write('  by voucher type:');
-        $this->table($tbl, ['type' => 'voucher type', '>vouchers' => '>vouchers', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12);
+        foreach ($byType as $k => $t) { $tbl[] = ['type' => $this->vt($k === 'none' ? null : (int)$k), '>vouchers' => $t['n'], '>of all' => isset($allBy[(string)$k]) ? (string)$allBy[(string)$k] : '', '>net (Dr-Cr)' => $this->drcr($t['diff']), '>gross' => $this->n($t['abs'])]; }
+        CLI::write('  by voucher type (unbalanced vouchers, and how many vouchers of that type the year has in all):');
+        $this->table($tbl, ['type' => 'voucher type', '>vouchers' => '>unbalanced', '>of all' => '>of all', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12);
+        $this->R['vouchers_by_type_total'] = $allBy;
         $this->R['imbalance_by_type'] = $byType;
 
         $tiny = 0; $tinyNet = 0.0;
@@ -444,6 +470,7 @@ class AuditBooks extends BaseCommand
         CLI::write('  largest differences:');
         $this->table($rows, ['id' => 'vch_txn_id', 'date' => 'date', 'type' => 'type', '>debit' => '>debit', '>credit' => '>credit', '>diff' => '>diff'], $this->limit);
         $this->R['imbalance_vouchers'] = array_slice($list, 0, 200);
+        $this->guard('linked_vouchers', fn() => $this->checkLinked($list));
     }
 
     private function rawImbalance(): float
@@ -488,6 +515,302 @@ class AuditBooks extends BaseCommand
                 WHERE a.cmp_id = ? AND h.vch_type_id = 23 AND a.acc_txn_type = 1 AND a.acc_txn_date BETWEEN ? AND ? {$this->b()} GROUP BY a.vch_txn_id) x",
             [$this->cmp, $this->fyStart, $this->to])->getRowArray();
         $this->check('gst_journals', 'INFO', "System journals (voucher type 23): {$t['v']}, of which {$t['unbal']} do not balance; their net debit-minus-credit is " . $this->drcr((float)$t['net']) . '.', $t);
+    }
+
+    // ======================================================================================================
+    //  2b  linked vouchers, voucher detail, CSV
+    // ======================================================================================================
+
+    /** Runs an optional query in its own savepoint: a missing table or column must not spoil the read-only transaction. @return mixed|null  null = it failed */
+    private function optional(callable $fn)
+    {
+        $this->db->simpleQuery('SAVEPOINT audit_opt');
+        try {
+            $r = $fn();
+            if ($r === false || $this->db->simpleQuery('SELECT 1') === false) { throw new \RuntimeException('query failed'); }
+            $this->db->simpleQuery('RELEASE SAVEPOINT audit_opt');
+            return $r;
+        } catch (\Throwable $e) {
+            $this->db->simpleQuery('ROLLBACK TO SAVEPOINT audit_opt');
+            return null;
+        }
+    }
+
+    /** @return array<int,array{dr:float,cr:float}>  every voucher with posted rows in the report window (same window and branch as the imbalance above) */
+    private function voucherTotals(): array
+    {
+        $rows = $this->db->query(
+            "SELECT a.vch_txn_id id,
+                    ROUND(COALESCE(SUM(CASE WHEN a.acc_txn_dr_cr = 1 THEN a.acc_txn_amt ELSE 0 END),0)::numeric, 2) dr,
+                    ROUND(COALESCE(SUM(CASE WHEN a.acc_txn_dr_cr = 2 THEN a.acc_txn_amt ELSE 0 END),0)::numeric, 2) cr
+               FROM accttxnmst a
+              WHERE a.cmp_id = ? AND a.acc_txn_type = 1 AND a.vch_txn_id > 0 AND a.acc_txn_date BETWEEN ? AND ? {$this->b()}
+              GROUP BY a.vch_txn_id", [$this->cmp, $this->fyStart, $this->to])->getResultArray();
+        $out = [];
+        foreach ($rows as $r) { $out[(int)$r['id']] = ['dr' => (float)$r['dr'], 'cr' => (float)$r['cr']]; }
+        return $out;
+    }
+
+    /**
+     * Puts every voucher of the window together with the vouchers it is linked to (vchbridgen, either direction, composition link types
+     * only): a composition-scheme purchase or sale and its GST PAID A/C system journal are two vouchers that belong together.
+     * @param array<int,array{dr:float,cr:float}> $tot
+     * @return array<int,array{members:int[],dr:float,cr:float,net:float,outside:int}>|null  keyed by group root; null = the link table cannot be read
+     */
+    private function linkGroups(array $tot): ?array
+    {
+        $links = $this->optional(fn() => $this->db->query('SELECT vch_bridge_type t, vch_txn_id_src s, vch_txn_id_dest d FROM vchbridgen WHERE cmp_id = ? AND vch_bridge_type IN (' . implode(',', self::COMPOSITION_LINKS) . ')', [$this->cmp])->getResultArray());
+        if ($links === null) { return null; }
+        $parent = [];
+        $find = static function (int $x) use (&$parent): int {
+            if (!isset($parent[$x])) { $parent[$x] = $x; }
+            $r = $x;
+            while ($parent[$r] !== $r) { $r = $parent[$r]; }
+            while ($parent[$x] !== $r) { $n = $parent[$x]; $parent[$x] = $r; $x = $n; }
+            return $r;
+        };
+        foreach ($links as $l) {
+            $a = (int)$l['s']; $b = (int)$l['d'];
+            if ($a <= 0 || $b <= 0 || $a === $b || (!isset($tot[$a]) && !isset($tot[$b]))) { continue; }
+            $ra = $find($a); $rb = $find($b);
+            if ($ra !== $rb) { $parent[$rb] = $ra; }
+        }
+        $groups = [];
+        foreach ($tot as $id => $t) {
+            $root = isset($parent[$id]) ? $find($id) : $id;
+            $groups[$root] = $groups[$root] ?? ['members' => [], 'dr' => 0.0, 'cr' => 0.0, 'net' => 0.0, 'outside' => 0];
+            $groups[$root]['members'][] = $id;
+            $groups[$root]['dr'] += $t['dr'];
+            $groups[$root]['cr'] += $t['cr'];
+        }
+        foreach (array_keys($parent) as $id) {                      // linked vouchers that have no posted rows in this window (other year / branch)
+            if (!isset($tot[$id])) { $root = $find($id); if (isset($groups[$root])) { $groups[$root]['outside']++; } }
+        }
+        foreach ($groups as &$g) { $g['dr'] = round($g['dr'], 2); $g['cr'] = round($g['cr'], 2); $g['net'] = round($g['dr'] - $g['cr'], 2); }
+        unset($g);
+        return $groups;
+    }
+
+    /** @param int[] $ids @return array<int,array<string,mixed>>  voucher headers by id */
+    private function headers(array $ids): array
+    {
+        $out = [];
+        foreach (array_chunk(array_values(array_unique(array_map('intval', $ids))), 500) as $chunk) {
+            $rows = $this->optional(fn() => $this->db->table('vchtxnconso')->where('cmp_id', $this->cmp)->whereIn('vch_txn_id', $chunk)->get()->getResultArray());
+            foreach ((array)$rows as $r) { $out[(int)$r['vch_txn_id']] = $r; }
+        }
+        return $out;
+    }
+
+    /** Section 2b: vouchers grouped with the vouchers they are linked to; what is still unbalanced after that; optional detail and CSV. @param array<int,array<string,mixed>> $list unbalanced vouchers, largest first */
+    private function checkLinked(array $list): void
+    {
+        $tot = $this->voucherTotals();
+        $groups = $this->linkGroups($tot);
+        if ($groups === null) {
+            $this->check('linked', 'INFO', "The link table 'vchbridgen' could not be read here, so vouchers were not grouped with the vouchers they are linked to.");
+            return;
+        }
+        $of = [];
+        foreach ($groups as $root => $g) { foreach ($g['members'] as $m) { $of[$m] = $root; } }
+        $own = []; foreach ($list as $v) { $own[(int)$v['vch_txn_id']] = $v; }
+
+        $linked = 0; $balanceWithLink = 0; $outside = 0;
+        foreach ($own as $id => $v) {
+            $g = $groups[$of[$id] ?? $id] ?? null;
+            if (!$g) { continue; }
+            if (count($g['members']) > 1) { $linked++; if (abs($g['net']) <= 0.005) { $balanceWithLink++; } }
+            if ($g['outside'] > 0) { $outside++; }
+        }
+        $still = array_filter($groups, fn($g) => abs($g['net']) > 0.005);
+        uasort($still, fn($a, $b) => abs($b['net']) <=> abs($a['net']));
+        $stillNet = 0.0; foreach ($still as $g) { $stillNet += $g['net']; }
+        $this->R['linked'] = ['unbalanced_alone' => count($own), 'linked' => $linked, 'balance_with_link' => $balanceWithLink,
+                              'groups_still_unbalanced' => count($still), 'net_still_unbalanced' => round($stillNet, 2), 'linked_outside_window' => $outside];
+
+        $this->check('linked', 'INFO', sprintf("Linked vouchers (vchbridgen link types 3/4/5, composition-scheme GST PAID A/C journals): %d of the %d unbalanced voucher(s) are linked to another voucher; %d of them balance once the linked voucher is added%s.",
+            $linked, count($own), $balanceWithLink, $outside ? "; $outside more are linked to a voucher outside this year / branch" : ''));
+        $this->check('linked_remaining', $still ? 'WARN' : 'OK', sprintf('After adding each voucher to the vouchers it is linked to, %d voucher group(s) still do not balance, together %s%s.',
+            count($still), $this->drcr($stillNet), $still ? ' - this is the real ledger imbalance' : ''), $this->R['linked']);
+        if (!$still) { return; }
+
+        $hdr = $this->headers(array_merge(...array_map(fn($g) => $g['members'], $still)));
+        $typeOf = function (int $id) use ($hdr, $own): ?int { return isset($hdr[$id]['vch_type_id']) ? (int)$hdr[$id]['vch_type_id'] : (isset($own[$id]['vch_type_id']) ? (int)$own[$id]['vch_type_id'] : null); };
+        $kinds = [];
+        foreach ($still as $g) {
+            $names = [];
+            foreach ($g['members'] as $m) { $names[$this->vt($typeOf($m))] = true; }
+            $k = implode(' + ', array_keys($names)) . (count($g['members']) === 1 ? ($g['outside'] ? ' (linked voucher outside this year)' : ' (no linked voucher)') : '');
+            $kinds[$k]['n'] = ($kinds[$k]['n'] ?? 0) + 1; $kinds[$k]['net'] = ($kinds[$k]['net'] ?? 0) + $g['net']; $kinds[$k]['abs'] = ($kinds[$k]['abs'] ?? 0) + abs($g['net']);
+        }
+        uasort($kinds, fn($a, $b) => $b['abs'] <=> $a['abs']);
+        $rows = []; foreach ($kinds as $k => $x) { $rows[] = ['kind' => $k, '>groups' => $x['n'], '>net (Dr-Cr)' => $this->drcr($x['net']), '>gross' => $this->n($x['abs'])]; }
+        CLI::write('  still unbalanced after adding linked vouchers, by kind:');
+        $this->table($rows, ['kind' => 'kind', '>groups' => '>groups', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12);
+        $this->R['linked_by_kind'] = $kinds;
+
+        $rows = [];
+        foreach (array_slice($still, 0, $this->limit, true) as $g) {
+            $ids = $g['members']; $date = '';
+            foreach ($ids as $m) { $d = (string)($hdr[$m]['vch_date'] ?? $own[$m]['vch_date'] ?? ''); if ($d !== '' && ($date === '' || $d < $date)) { $date = $d; } }
+            $rows[] = ['ids' => implode(' + ', array_slice($ids, 0, 3)) . (count($ids) > 3 ? ' ...' : ''), 'date' => substr($date, 0, 10),
+                       'types' => implode(' + ', array_map(fn($m) => (string)($typeOf($m) ?? '?'), array_slice($ids, 0, 3))),
+                       '>debit' => $this->n($g['dr']), '>credit' => $this->n($g['cr']), '>diff' => $this->drcr($g['net'])];
+        }
+        CLI::write('  largest groups that still do not balance:');
+        $this->table($rows, ['ids' => 'vch_txn_id', 'date' => 'date', 'types' => 'type ids', '>debit' => '>debit', '>credit' => '>credit', '>diff' => '>diff'], $this->limit);
+        $this->R['linked_groups'] = array_slice(array_map(fn($g) => ['members' => $g['members'], 'dr' => $g['dr'], 'cr' => $g['cr'], 'net' => $g['net'], 'outside' => $g['outside']], array_values($still)), 0, 200);
+
+        // detail on request
+        $want = $this->opt('vouchers');
+        if ($want !== null) {
+            $n = ($want === true || $want === '') ? 3 : max(1, (int)$want);
+            $this->heading('2b  The largest vouchers that still do not balance, row by row');
+            $shown = 0;
+            foreach ($still as $g) {
+                if ($shown++ >= $n) { break; }
+                $this->voucherBlock($this->largestMember($g, $tot), $tot);
+            }
+            $paired = array_filter($groups, function ($g) use ($own) { if (count($g['members']) < 2 || abs($g['net']) > 0.005) { return false; } foreach ($g['members'] as $m) { if (isset($own[$m])) { return true; } } return false; });
+            uasort($paired, fn($a, $b) => abs($this->largestDiff($b, $tot)) <=> abs($this->largestDiff($a, $tot)));
+            if ($paired) {
+                $this->heading('2b  Vouchers that balance only together with their linked voucher (for comparison)');
+                $shown = 0;
+                foreach ($paired as $g) {
+                    if ($shown++ >= $n) { break; }
+                    $this->voucherBlock($this->largestMember($g, $tot), $tot);
+                }
+            }
+        }
+        $csv = $this->opt('csv');
+        if (is_string($csv) && $csv !== '') { $this->writeCsv($csv, $own, $groups, $of, $tot); }
+    }
+
+    private function largestDiff(array $g, array $tot): float
+    {
+        $best = 0.0;
+        foreach ($g['members'] as $m) { $d = ($tot[$m]['dr'] ?? 0) - ($tot[$m]['cr'] ?? 0); if (abs($d) > abs($best)) { $best = $d; } }
+        return $best;
+    }
+
+    private function largestMember(array $g, array $tot): int
+    {
+        $best = $g['members'][0]; $bd = -1.0;
+        foreach ($g['members'] as $m) { $d = abs(($tot[$m]['dr'] ?? 0) - ($tot[$m]['cr'] ?? 0)); if ($d > $bd) { $bd = $d; $best = $m; } }
+        return (int)$best;
+    }
+
+    /** --voucher ID,ID: the given vouchers row by row, whether or not they balance. */
+    private function checkVoucherIds(string $csv): void
+    {
+        $tot = $this->voucherTotals();
+        $this->heading('2b  Vouchers asked for with --voucher');
+        foreach (array_filter(array_map('intval', explode(',', $csv))) as $id) { $this->voucherBlock($id, $tot); }
+    }
+
+    /** One voucher: header, every ledger row, stock rows, GST summary, and the vouchers linked to it with their rows. */
+    private function voucherBlock(int $id, array $tot): void
+    {
+        $h = $this->headers([$id])[$id] ?? null;
+        $sub = $h['vch_sub_type_id'] ?? null; $ser = $h['vch_series_id'] ?? null;
+        CLI::newLine();
+        CLI::write(sprintf('  voucher %d   date %s   type %s%s%s   branch %s', $id, substr((string)($h['vch_date'] ?? '?'), 0, 10), $this->vt(isset($h['vch_type_id']) ? (int)$h['vch_type_id'] : null),
+            $sub !== null ? "   sub-type $sub" : '', $ser !== null ? "   series $ser" : '', $h['hobo_id'] ?? '?'), 'white');
+        $rec = ['id' => $id, 'header' => $h];
+        $rec['rows'] = $this->printRows($id);
+        $bill = $this->optional(fn() => $this->db->query('SELECT inwsup_bill_ref_no b FROM gstrinwsup WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 1', [$this->cmp, $id])->getRowArray());
+        if ($bill && (string)($bill['b'] ?? '') !== '') { CLI::write('         supplier bill no: ' . $bill['b']); $rec['bill_no'] = $bill['b']; }
+        $st = $this->optional(fn() => $this->db->query('SELECT COUNT(*) n, COALESCE(SUM(itm_txn_amt),0) amt FROM itemtxnmst WHERE cmp_id = ? AND vch_txn_id = ? AND itm_txn_type = 1', [$this->cmp, $id])->getRowArray());
+        if ($st && (int)$st['n'] > 0) { CLI::write(sprintf('         stock rows: %d, value %s', $st['n'], $this->n((float)$st['amt']))); $rec['stock'] = $st; }
+        $g = $this->optional(fn() => $this->db->query(
+            'SELECT COUNT(*) n, COALESCE(SUM(vch_taxable_value),0) taxable, COALESCE(SUM(vch_igst),0) igst, COALESCE(SUM(vch_cgst),0) cgst, COALESCE(SUM(vch_sgst_ugst),0) sgst, COALESCE(SUM(vch_cess),0) cess, COALESCE(SUM(vch_total_tax),0) tax
+               FROM vchgstsumn WHERE cmp_id = ? AND vch_txn_id = ?', [$this->cmp, $id])->getRowArray());
+        $diff = round(($tot[$id]['dr'] ?? 0) - ($tot[$id]['cr'] ?? 0), 2);
+        if ($g && (int)$g['n'] > 0) {
+            CLI::write(sprintf('         GST summary (vchgstsumn, %d row(s)): taxable %s   IGST %s   CGST %s   SGST/UTGST %s   cess %s   total tax %s',
+                $g['n'], $this->n((float)$g['taxable']), $this->n((float)$g['igst']), $this->n((float)$g['cgst']), $this->n((float)$g['sgst']), $this->n((float)$g['cess']), $this->n((float)$g['tax'])));
+            $rec['gst_summary'] = $g;
+            if (abs($diff) > 0.005 && abs(abs($diff) - (float)$g['tax']) <= 0.05) {
+                $this->check('voucher_tax_' . $id, 'INFO', "voucher $id: its debit/credit difference (" . $this->drcr($diff) . ') equals the total tax in its GST summary (' . $this->n((float)$g['tax']) . ').');
+            }
+        }
+        $links = $this->optional(fn() => $this->db->query('SELECT vch_bridge_type t, vch_txn_id_src s, vch_txn_id_dest d FROM vchbridgen WHERE cmp_id = ? AND (vch_txn_id_src = ? OR vch_txn_id_dest = ?) ORDER BY 1, 2, 3', [$this->cmp, $id, $id])->getResultArray());
+        $sumDr = (float)($tot[$id]['dr'] ?? 0); $sumCr = (float)($tot[$id]['cr'] ?? 0); $rec['linked'] = [];
+        if (!$links) {
+            CLI::write('         linked vouchers: none' . ($links === null ? ' (link table not readable)' : ''), 'light_gray');
+        }
+        $added = 0;
+        foreach ((array)$links as $l) {
+            $other = (int)$l['s'] === $id ? (int)$l['d'] : (int)$l['s'];
+            $oh = $this->headers([$other])[$other] ?? null;
+            $compo = in_array((int)$l['t'], self::COMPOSITION_LINKS, true);
+            CLI::write(sprintf('         linked voucher %d (link type %s, this voucher is the %s): date %s, type %s, branch %s%s%s', $other, $l['t'], (int)$l['s'] === $id ? 'source' : 'destination',
+                substr((string)($oh['vch_date'] ?? '?'), 0, 10), $this->vt(isset($oh['vch_type_id']) ? (int)$oh['vch_type_id'] : null), $oh['hobo_id'] ?? '?', $oh === null ? '  [voucher header not found]' : '',
+                $compo ? '' : '  [not a composition-scheme link: shown for information, not added]'), 'yellow');
+            $orows = $this->printRows($other, '            ');
+            $inWindow = isset($tot[$other]);
+            if ($compo && $inWindow) { $sumDr += $tot[$other]['dr']; $sumCr += $tot[$other]['cr']; $added++; }
+            $rec['linked'][] = ['id' => $other, 'link_type' => $l['t'], 'composition_link' => $compo, 'in_window' => $inWindow, 'rows' => $orows];
+        }
+        if ($added) {
+            CLI::write(sprintf('         together with the linked voucher(s): debit %s   credit %s   difference %s', $this->n($sumDr), $this->n($sumCr), $this->drcr(round($sumDr - $sumCr, 2))), 'light_gray');
+        }
+        $this->R['voucher_detail'][] = $rec;
+    }
+
+    /** Prints the ledger rows of one voucher; returns them. @return array<int,array<string,mixed>> */
+    private function printRows(int $id, string $pad = '         '): array
+    {
+        $rows = $this->optional(fn() => $this->db->query(
+            'SELECT a.acc_txn_type t, a.acc_txn_dr_cr s, a.acc_txn_amt amt, a.acc_id, m.acc_name, a.hobo_id, a.acc_txn_date d
+               FROM accttxnmst a LEFT JOIN acctmaster m ON m.acc_id = a.acc_id AND m.cmp_id = a.cmp_id
+              WHERE a.cmp_id = ? AND a.vch_txn_id = ? ORDER BY a.acc_txn_type, a.acc_txn_dr_cr, a.acc_txn_amt DESC, a.acc_id', [$this->cmp, $id])->getResultArray());
+        if (!$rows) { CLI::write($pad . '(no ledger rows)', 'light_gray'); return []; }
+        $dr = $cr = 0.0; $tag = [1 => '', 2 => ' [optional]', 3 => ' [memorandum]', 4 => ' [pending approval]', 5 => ' [rejected]'];
+        foreach ($rows as $r) {
+            $side = (int)$r['s'] === 1 ? 'Dr' : ((int)$r['s'] === 2 ? 'Cr' : '??');
+            CLI::write(sprintf('%s%s %16s   %s (acc %s)%s%s', $pad, $side, $this->n((float)$r['amt']), trim((string)($r['acc_name'] ?? '(no account master row)')), $r['acc_id'] ?? '?',
+                $tag[(int)$r['t']] ?? ' [type ' . $r['t'] . ']', (!$this->cons && (int)$r['hobo_id'] !== $this->bo) ? ' [branch ' . $r['hobo_id'] . ']' : ''));
+            if ((int)$r['t'] === 1) { if ((int)$r['s'] === 1) { $dr += (float)$r['amt']; } elseif ((int)$r['s'] === 2) { $cr += (float)$r['amt']; } }
+        }
+        CLI::write(sprintf('%s   posted rows: debit %s   credit %s   difference %s', $pad, $this->n($dr), $this->n($cr), $this->drcr(round($dr - $cr, 2))), 'light_gray');
+        return $rows;
+    }
+
+    /** --csv FILE: every voucher that does not balance on its own, with the vouchers linked to it and whether they balance together. */
+    private function writeCsv(string $file, array $own, array $groups, array $of, array $tot): void
+    {
+        $ids = array_keys($own);
+        $hdr = $this->headers($ids);
+        $leg = []; $tax = []; $bill = [];
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $in = implode(',', array_map('intval', $chunk));
+            $r = $this->optional(fn() => $this->db->query(
+                "SELECT DISTINCT ON (a.vch_txn_id) a.vch_txn_id id, m.acc_name FROM accttxnmst a LEFT JOIN acctmaster m ON m.acc_id = a.acc_id AND m.cmp_id = a.cmp_id
+                  WHERE a.cmp_id = ? AND a.acc_txn_type = 1 AND a.vch_txn_id IN ($in) ORDER BY a.vch_txn_id, a.acc_txn_amt DESC", [$this->cmp])->getResultArray());
+            foreach ((array)$r as $x) { $leg[(int)$x['id']] = (string)$x['acc_name']; }
+            $r = $this->optional(fn() => $this->db->query("SELECT vch_txn_id id, SUM(vch_total_tax) t FROM vchgstsumn WHERE cmp_id = ? AND vch_txn_id IN ($in) GROUP BY vch_txn_id", [$this->cmp])->getResultArray());
+            foreach ((array)$r as $x) { $tax[(int)$x['id']] = (float)$x['t']; }
+            $r = $this->optional(fn() => $this->db->query("SELECT vch_txn_id id, MAX(inwsup_bill_ref_no) b FROM gstrinwsup WHERE cmp_id = ? AND vch_txn_id IN ($in) GROUP BY vch_txn_id", [$this->cmp])->getResultArray());
+            foreach ((array)$r as $x) { $bill[(int)$x['id']] = (string)$x['b']; }
+        }
+        $fh = @fopen($file, 'w');
+        if (!$fh) { $this->check('csv', 'WARN', "Could not write $file."); return; }
+        fputcsv($fh, ['vch_txn_id', 'date', 'type_id', 'type', 'sub_type_id', 'branch', 'debit', 'credit', 'diff_debit_minus_credit', 'linked_voucher_ids', 'group_debit', 'group_credit', 'group_diff', 'status', 'largest_leg_account', 'gst_summary_total_tax', 'supplier_bill_no']);
+        $names = $this->vchTypeNames(); $n = 0;
+        foreach ($own as $id => $v) {
+            $g = $groups[$of[$id] ?? $id] ?? ['members' => [$id], 'dr' => $v['dr'], 'cr' => $v['cr'], 'net' => $v['diff'], 'outside' => 0];
+            $others = array_values(array_diff($g['members'], [$id]));
+            $status = count($g['members']) > 1 ? (abs($g['net']) <= 0.005 ? 'balances together with linked voucher' : 'STILL UNBALANCED with linked voucher') : ($g['outside'] ? 'STILL UNBALANCED (linked voucher outside this year)' : 'STILL UNBALANCED (no linked voucher)');
+            $t = (int)($v['vch_type_id'] ?? $hdr[$id]['vch_type_id'] ?? 0);
+            fputcsv($fh, [$id, substr((string)($v['vch_date'] ?? $hdr[$id]['vch_date'] ?? ''), 0, 10), $t, $names[$t] ?? '', $hdr[$id]['vch_sub_type_id'] ?? '', $hdr[$id]['hobo_id'] ?? '',
+                          number_format((float)$v['dr'], 2, '.', ''), number_format((float)$v['cr'], 2, '.', ''), number_format((float)$v['diff'], 2, '.', ''), implode(' ', $others),
+                          number_format($g['dr'], 2, '.', ''), number_format($g['cr'], 2, '.', ''), number_format($g['net'], 2, '.', ''), $status, $leg[$id] ?? '',
+                          isset($tax[$id]) ? number_format($tax[$id], 2, '.', '') : '', $bill[$id] ?? '']);
+            $n++;
+        }
+        fclose($fh);
+        $this->check('csv', 'INFO', "Wrote $n unbalanced voucher(s) to $file (open it in Excel; the 'status' column tells which ones still do not balance).");
     }
 
     // ======================================================================================================
@@ -780,7 +1103,46 @@ class AuditBooks extends BaseCommand
         }
         $this->table($rows, ['report' => 'report', '>old' => '>old code', '>corrected' => '>corrected', '>change' => '>change'], 30);
         $this->R['legacy'] = $rows;
+        $this->legacyPlLines();
         $this->check('legacy', 'INFO', 'Old = the previous calculation logic; "change" is what the correction alters on this data. For a balanced set of books the Balance Sheet and Trial Balance differences would be 0.');
+    }
+
+    /** The condensed Profit & Loss (view 0) line by line, old code against corrected: shows which lines the correction moved. */
+    private function legacyPlLines(): void
+    {
+        $m = $this->m; $cons = (int)$this->cons;
+        $lines = function (callable $fn): ?array {
+            $this->db->simpleQuery('SAVEPOINT legacy_pl_sp');
+            try {
+                $rows = $fn(); $out = [];
+                $names = [11 => 'Purchase', 7 => 'Direct Expenses', 8 => 'Sales', 10 => 'Direct Income', 13 => 'Indirect Expenses', 12 => 'Indirect Income'];
+                foreach ((array)$rows as $r) {
+                    foreach (['l', 'r'] as $side) {
+                        $type = $r[$side . '_type'] ?? null; $amt = (float)($r[$side . '_balance_total'] ?? 0);
+                        if ($type === 'opn') { $k = 'Opening Stock'; }
+                        elseif ($type === 'clo') { $k = 'Closing Stock'; }
+                        elseif ($type === 'prt') { $id = (int)($r[$side . '_parent_id'] ?? $r[$side . '_group_id'] ?? 0); $k = $names[$id] ?? "category $id"; }
+                        else { continue; }
+                        $out[$k] = ($out[$k] ?? 0.0) + $amt;
+                    }
+                }
+                $this->db->simpleQuery('RELEASE SAVEPOINT legacy_pl_sp');
+                return $out;
+            } catch (\Throwable $e) { $this->db->simpleQuery('ROLLBACK TO SAVEPOINT legacy_pl_sp'); return null; }
+        };
+        $old = $lines(fn() => $m->legacy_load_profit_loss_horizontal(0, $this->from, $this->to, 1, $cons));
+        $new = $lines(fn() => $m->load_profit_loss_horizontal(0, $this->from, $this->to, 1, $cons));
+        if ($old === null || $new === null) { return; }
+        $order = ['Opening Stock', 'Purchase', 'Direct Expenses', 'Sales', 'Direct Income', 'Closing Stock', 'Indirect Expenses', 'Indirect Income'];
+        $rows = [];
+        foreach (array_unique(array_merge($order, array_keys($old), array_keys($new))) as $k) {
+            $o = round((float)($old[$k] ?? 0), 2); $n = round((float)($new[$k] ?? 0), 2);
+            if (abs($o - $n) > 0.005) { $rows[] = ['line' => $k, '>old' => $this->n($o), '>corrected' => $this->n($n), '>change' => $this->sn($n - $o)]; }
+        }
+        $this->R['legacy_pl_lines'] = ['old' => $old, 'corrected' => $new];
+        if (!$rows) { CLI::write('  Profit & Loss (condensed view), line by line: the old code and the corrected one agree on every line.'); return; }
+        CLI::write('  Profit & Loss (condensed view), the lines the correction changed (amounts as shown on the report, debit side / credit side):');
+        $this->table($rows, ['line' => 'line', '>old' => '>old code', '>corrected' => '>corrected', '>change' => '>change'], 12);
     }
 
     // ======================================================================================================

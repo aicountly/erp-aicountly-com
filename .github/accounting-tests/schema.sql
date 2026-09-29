@@ -1,6 +1,6 @@
 -- SANDBOX-ONLY schema for exercising the report code. Column names are taken from the
 -- application's own queries/inserts; production DDL is not in the repository.
-DROP TABLE IF EXISTS itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst CASCADE;
+DROP TABLE IF EXISTS itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst CASCADE;
 
 CREATE TABLE cmpfymastr (
   cmpfymastr_id serial PRIMARY KEY, cmp_id int, fy_beg_date date, fy_end_date date,
@@ -34,7 +34,7 @@ CREATE TABLE accttxnmst (
 );
 CREATE TABLE vchtxnconso (
   vch_txn_id serial PRIMARY KEY, cmp_id int, hobo_id int, txn_id int, vch_type_id int,
-  vch_date date, acc_txn_type int DEFAULT 1
+  vch_date date, acc_txn_type int DEFAULT 1, vch_sub_type_id int NULL, vch_series_id int NULL
 );
 CREATE INDEX ON accttxnmst (cmp_id, acc_id, acc_txn_date);
 CREATE INDEX ON undercrsmt (cmp_id, cmpfymastr_id, crs_mst_type, crs_mst_id);
@@ -44,7 +44,17 @@ CREATE TABLE itmoppyval (
   itm_py_val_amt numeric(18,2) DEFAULT 0, itm_val_method_id int, mat_cent_id int
 );
 
-CREATE TABLE hobomaster (cmp_id int, hobo_id int, hobo_name text);
+CREATE TABLE hobomaster (cmp_id int, hobo_id int, hobo_name text, hobo_gstin_type int NULL);
 CREATE TABLE acctmstdet (cmp_id int, acc_id int, acc_is_sys_acc int, acc_is_sez int);
 CREATE TABLE cmpmastern (cmp_id int PRIMARY KEY, cmp_name text, cmp_status int DEFAULT 1);
 CREATE TABLE vchtypemst (vch_type_id int PRIMARY KEY, vch_name text);
+
+-- tables read only by the audit's voucher detail (column names from the application's own inserts)
+CREATE TABLE vchbridgen (cmp_id int, vch_bridge_type int, vch_txn_id_src int, vch_txn_id_dest int);
+CREATE TABLE vchgstsumn (
+  cmp_id int, vch_txn_id int, txn_id int, acc_bsd_id int, acc_bsd_type int, vch_taxable_value numeric(18,2) DEFAULT 0,
+  vch_igst numeric(18,2) DEFAULT 0, vch_cgst numeric(18,2) DEFAULT 0, vch_sgst_ugst numeric(18,2) DEFAULT 0,
+  vch_cess numeric(18,2) DEFAULT 0, vch_total_tax numeric(18,2) DEFAULT 0
+);
+CREATE TABLE gstrinwsup (cmp_id int, vch_txn_id int, inwsup_bill_ref_no text);
+CREATE TABLE itemtxnmst (cmp_id int, hobo_id int, vch_txn_id int, itm_id_unit_id text, itm_txn_qty numeric(18,4), itm_txn_amt numeric(18,2), itm_txn_type int DEFAULT 1, itm_txn_dr_cr int DEFAULT 1);
