@@ -662,6 +662,13 @@ public function show_bill_ref_no($voucher_type_id, $series_id, $voucher_txn_id, 
 	   return $response;
    }
 
+  /**
+   * Posts one GST component (IGST / CGST / SGST / UTGST / cess) to the company's tax ledger for that
+   * component: a positive $tax_value is a debit, a negative one a credit.
+   *
+   * @return float the amount actually posted, or 0.00 when the company has no ledger for the component
+   *               (the row is then NOT written, which the caller has to account for).
+   */
   public function save_taxacc_yes_out_data($voucher_txn_id,$voucher_series,$tax_value,$tax_cat_sub_type,$voucher_date,$bsd_input_output=2,$compId=null, $boId=null){
       $bsd_type     =1;
 	  if($compId)
@@ -692,19 +699,25 @@ public function show_bill_ref_no($voucher_type_id, $series_id, $voucher_txn_id, 
 							  'acc_id'            => $billsundry_id,
 							  'acc_txn_date'      => $voucher_date,
 							  'acc_txn_dr_cr'     => ($tax_value<0) ? 2 : 1,
-							  'acc_txn_amt'       => parseAmount(abs($tax_value)), 
+							  'acc_txn_amt'       => parseAmount(abs($tax_value)),
 							  'acc_txn_fcy'       => 0,
 							  'vch_txn_id'        => $voucher_txn_id,
 							  'txn_id'            => $txn_id,
 							  'hobo_id'           => $sel_boId,
 							  'acc_txn_type'      => 1
-							];  				
+							];
 	  $this->add_acc_txn_data($acc_txn_data);
 	  SaveErrorLog("Saving tax account entry: " . json_encode($acc_txn_data));
+	  \App\Libraries\CompositionPosting::touch($voucher_txn_id);
+	  return parseAmount(abs($tax_value));
       }
-      
-      
-  }	
+      // The tax ledger for this component is not set up for the company, so NO row was written. The
+      // caller's own total must not assume one was: a leg that silently disappears is what leaves a
+      // voucher one-sided. Returning 0.00 lets the caller (and CompositionPosting) see it.
+      SaveErrorLog("No tax account is mapped for bsd_type 1 / input-output $bsd_input_output / category $tax_cat_sub_type"
+                   . " of company $sel_compId: no ledger row was written for " . parseAmount(abs($tax_value)));
+      return 0.0;
+  }
   
   public  function add_sublgr_master($data){
         $bill_mst = $this->db->table("subacctmst")
@@ -4394,8 +4407,13 @@ public function computeGstTotals(int $voucher_txn_id): array
 		  else 
 			$bo_id =$VchOthrBo;
 		  $data['hobo_id'] = $bo_id;
-		  $this->db->table($comp_vch_cons_tbl)->insert($data);		  
-		  return $this->db->insertID();			
+		  $this->db->table($comp_vch_cons_tbl)->insert($data);
+		  $new_vch_txn_id = $this->db->insertID();
+		  if ((int)($data['vch_type_id'] ?? 0) === \App\Libraries\CompositionPosting::JOURNAL_TYPE) {
+			  // a composition "GST PAID A/C" journal: its entry is completed and checked before commit
+			  \App\Libraries\CompositionPosting::touch($new_vch_txn_id);
+		  }
+		  return $new_vch_txn_id;
 	}
     public function SaveDrftVoucher($data){		
 		 $postgr_db = $this->externaldb->postgr_db();
