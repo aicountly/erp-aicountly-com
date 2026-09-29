@@ -10,6 +10,7 @@ run "engine (basic ledger)"            php test_engine.php
 run "profit & loss (basic ledger)"     php test_pl.php
 run "balance sheet (basic ledger)"     php test_bs.php
 run "trial balance (basic ledger)"     php test_tb.php
+run "P&L with tax ledgers under P&L (basic +)" php test_pl_bsd.php      # adds rows: keep it the last test on this ledger
 ./reload_db.sh stress >/dev/null 2>&1
 run "ledger identities (stress ledger)"  php test_invariants.php
 run "views render + export buttons"      php render_views.php

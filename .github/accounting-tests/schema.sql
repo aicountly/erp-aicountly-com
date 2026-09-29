@@ -1,6 +1,6 @@
 -- SANDBOX-ONLY schema for exercising the report code. Column names are taken from the
 -- application's own queries/inserts; production DDL is not in the repository.
-DROP TABLE IF EXISTS itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst CASCADE;
+DROP TABLE IF EXISTS hobogstinm, itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst CASCADE;
 
 CREATE TABLE cmpfymastr (
   cmpfymastr_id serial PRIMARY KEY, cmp_id int, fy_beg_date date, fy_end_date date,
@@ -44,7 +44,7 @@ CREATE TABLE itmoppyval (
   itm_py_val_amt numeric(18,2) DEFAULT 0, itm_val_method_id int, mat_cent_id int
 );
 
-CREATE TABLE hobomaster (cmp_id int, hobo_id int, hobo_name text, hobo_gstin_type int NULL);
+CREATE TABLE hobomaster (cmp_id int, hobo_id int, hobo_name text);
 CREATE TABLE acctmstdet (cmp_id int, acc_id int, acc_is_sys_acc int, acc_is_sez int);
 CREATE TABLE cmpmastern (cmp_id int PRIMARY KEY, cmp_name text, cmp_status int DEFAULT 1);
 CREATE TABLE vchtypemst (vch_type_id int PRIMARY KEY, vch_name text);
@@ -58,3 +58,4 @@ CREATE TABLE vchgstsumn (
 );
 CREATE TABLE gstrinwsup (cmp_id int, vch_txn_id int, inwsup_bill_ref_no text);
 CREATE TABLE itemtxnmst (cmp_id int, hobo_id int, vch_txn_id int, itm_id_unit_id text, itm_txn_qty numeric(18,4), itm_txn_amt numeric(18,2), itm_txn_type int DEFAULT 1, itm_txn_dr_cr int DEFAULT 1);
+CREATE TABLE hobogstinm (cmp_id int, hobo_id int, hobo_gstin_type int);

@@ -348,13 +348,16 @@ class AuditBooks extends BaseCommand
         CLI::write("  financial year : {$this->fyStart} .. {$this->fyEnd}    report period: {$this->from} .. {$this->to}");
         CLI::write('  php ' . PHP_VERSION . '   database ' . $this->db->getPlatform() . '   default valuation method: ' . ($fyRow['def_val_method'] ?? '?'));
         try {
-            $b = $this->univ()->table('hobomaster')->where('cmp_id', $this->cmp)->where('hobo_id', $this->bo)->get()->getRowArray();
-            if ($b && isset($b['hobo_gstin_type']) && $b['hobo_gstin_type'] !== '') {
-                $gt = (int)$b['hobo_gstin_type'];
-                CLI::write('  branch GST registration type: ' . $gt . ($gt === 2 ? ' (composition scheme: GST on purchases and sales is posted through "GST PAID A/C" system journals)' : ($gt === 1 ? ' (regular)' : '')));
-                $this->R['branch_gstin_type'] = $gt;
+            $rows = $this->univ()->table('hobogstinm')->select('hobo_gstin_type')->where('cmp_id', $this->cmp)->where('hobo_id', $this->bo)->get()->getResultArray();
+            $types = array_values(array_unique(array_map(fn($r) => (int)$r['hobo_gstin_type'], $rows)));
+            sort($types);
+            if ($types) {
+                $label = [1 => 'regular', 2 => 'composition scheme'];
+                CLI::write('  branch GST registration type: ' . implode(', ', array_map(fn($t) => $t . ' (' . ($label[$t] ?? '?') . ')', $types))
+                    . (in_array(2, $types, true) ? ' - composition-scheme purchases and sales are posted through "GST PAID A/C" system journals' : ''));
+                $this->R['branch_gstin_types'] = $types;
             }
-        } catch (\Throwable $e) { /* the branch master is optional here */ }
+        } catch (\Throwable $e) { /* the GSTIN master is optional here */ }
         $this->R['meta'] = ['company' => $this->cmp, 'fy' => $this->fy, 'branch' => $this->cons ? 'all' : $this->bo, 'fy_start' => $this->fyStart, 'fy_end' => $this->fyEnd,
                             'from' => $this->from, 'to' => $this->to, 'generated' => date('c')];
     }
@@ -622,16 +625,26 @@ class AuditBooks extends BaseCommand
         return $out;
     }
 
-    /** Up to three legs (one side of a voucher group) whose amounts add up to $want; smallest set first. @param array<int,array{amt:float}> $cand @return int[]|null indexes */
-    private function legSubset(array $cand, float $want): ?array
+    /**
+     * Every set of up to three legs (one side of a voucher group) whose amounts add up to $want, smallest sets first, at most $max;
+     * the same accounts and amounts in another order count once. More than one answer means the arithmetic alone cannot say which is the extra leg.
+     * @param array<int,array{amt:float,acc:string}> $cand @return array<int,int[]> lists of indexes into $cand
+     */
+    private function legSubsets(array $cand, float $want, int $max = 3): array
     {
         $n = count($cand);
-        if ($n === 0 || $n > 60) { return null; }
-        $tol = 0.02;
-        for ($i = 0; $i < $n; $i++) { if (abs($cand[$i]['amt'] - $want) <= $tol) { return [$i]; } }
-        for ($i = 0; $i < $n; $i++) { for ($j = $i + 1; $j < $n; $j++) { if (abs($cand[$i]['amt'] + $cand[$j]['amt'] - $want) <= $tol) { return [$i, $j]; } } }
-        for ($i = 0; $i < $n; $i++) { for ($j = $i + 1; $j < $n; $j++) { for ($k = $j + 1; $k < $n; $k++) { if (abs($cand[$i]['amt'] + $cand[$j]['amt'] + $cand[$k]['amt'] - $want) <= $tol) { return [$i, $j, $k]; } } } }
-        return null;
+        if ($n === 0 || $n > 40) { return []; }
+        $tol = 0.02; $out = []; $seen = [];
+        $add = function (array $idx) use (&$out, &$seen, $cand, $max): bool {
+            $parts = array_map(fn($i) => $cand[$i]['acc'] . ':' . $cand[$i]['amt'], $idx); sort($parts);
+            $key = implode('|', $parts);
+            if (!isset($seen[$key])) { $seen[$key] = true; $out[] = $idx; }
+            return count($out) >= $max;
+        };
+        for ($i = 0; $i < $n; $i++) { if (abs($cand[$i]['amt'] - $want) <= $tol && $add([$i])) { return $out; } }
+        for ($i = 0; $i < $n; $i++) { for ($j = $i + 1; $j < $n; $j++) { if (abs($cand[$i]['amt'] + $cand[$j]['amt'] - $want) <= $tol && $add([$i, $j])) { return $out; } } }
+        for ($i = 0; $i < $n; $i++) { for ($j = $i + 1; $j < $n; $j++) { for ($k = $j + 1; $k < $n; $k++) { if (abs($cand[$i]['amt'] + $cand[$j]['amt'] + $cand[$k]['amt'] - $want) <= $tol && $add([$i, $j, $k])) { return $out; } } } }
+        return $out;
     }
 
     /**
@@ -654,7 +667,7 @@ class AuditBooks extends BaseCommand
                   WHERE a.cmp_id = ? AND a.acc_txn_type = 1 AND a.vch_txn_id IN ($in) AND a.acc_txn_date BETWEEN ? AND ? {$this->b()}", [$this->cmp, $this->fyStart, $this->to])->getResultArray());
             foreach ((array)$r as $x) { $rows[(int)$x['id']][] = $x; }
         }
-        $summary = []; $accs = [];
+        $summary = []; $accs = []; $ambiguous = 0;
         foreach ($still as $root => $g) {
             $legs = [];
             foreach ($g['members'] as $m) {
@@ -663,10 +676,14 @@ class AuditBooks extends BaseCommand
             $side = $g['net'] < 0 ? 2 : 1;
             $cand = array_values(array_filter($legs, fn($l) => $l['side'] === $side && $l['amt'] > 0));
             usort($cand, fn($a, $b) => [$b['amt'], $a['acc']] <=> [$a['amt'], $b['acc']]);          // largest first, then by name: the same text on every run
-            $hit = $this->legSubset($cand, round(abs($g['net']), 2));
-            if ($hit !== null) {
+            $alts = $this->legSubsets($cand, round(abs($g['net']), 2));
+            $zeroGst = false;
+            foreach ($legs as $l) { if ($l['side'] === 1 && $l['amt'] == 0.0 && preg_match('/gst\s*paid/i', $l['acc'])) { $zeroGst = true; } }
+            if ($alts) {
+                $hit = $alts[0];
                 $names = array_map(fn($i) => $cand[$i]['acc'], $hit); sort($names);
-                $text = ($side === 2 ? 'Cr ' : 'Dr ') . implode(' + ', array_map(fn($i) => $cand[$i]['acc'] . ' ' . $this->n($cand[$i]['amt']), $hit));
+                $text = implode('  OR  ', array_map(fn($idx) => ($side === 2 ? 'Cr ' : 'Dr ') . implode(' + ', array_map(fn($i) => $cand[$i]['acc'] . ' ' . $this->n($cand[$i]['amt']), $idx)), $alts));
+                if (count($alts) > 1) { $ambiguous++; }
                 $key = ($side === 2 ? 'the credit' : 'the debit') . ' legs on ' . implode(' + ', $names);
                 foreach ($hit as $i) {
                     $a = $cand[$i]; $k2 = $a['id'] . ':' . $a['side'];
@@ -677,6 +694,7 @@ class AuditBooks extends BaseCommand
                 $text = 'no combination of up to 3 legs equals the difference: a leg is missing' . (($suffix[$root] ?? '') !== '' ? ' [' . trim($suffix[$root], ' ()') . ']' : '');
                 $key = '(no combination of up to 3 legs equals it: a leg is missing)';
             }
+            if ($zeroGst) { $text .= ' [the GST PAID A/C debit leg of this group is 0.00]'; $key .= ' [GST PAID A/C debit is 0.00]'; }
             foreach ($g['members'] as $m) { $this->note[$m]['equals'] = $text; }
             $summary[$key]['n'] = ($summary[$key]['n'] ?? 0) + 1;
             $summary[$key]['net'] = ($summary[$key]['net'] ?? 0) + $g['net'];
@@ -688,6 +706,7 @@ class AuditBooks extends BaseCommand
         CLI::write('  what the differences equal (the legs of each group that add up to its difference):');
         $this->table($tbl, ['what' => 'the difference of the group equals', '>groups' => '>groups', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12, 76);
         $this->R['linked_explained'] = $summary;
+        if ($ambiguous) { CLI::write("  ($ambiguous group(s) fit more than one set of legs, so the arithmetic alone cannot tell which is the extra one: the table counts the first, the CSV lists every alternative)", 'light_gray'); }
 
         if ($accs) {                                                    // where those legs sit in the reports
             $snap = $this->snap();
@@ -697,12 +716,12 @@ class AuditBooks extends BaseCommand
             foreach ($accs as $a) {
                 $acc = $snap->accounts[$a['id']] ?? null;
                 $gid = (int)($acc['group_id'] ?? 0);
-                $tbl[] = ['name' => $a['name'], 'legs' => ($a['side'] === 2 ? 'Cr ' : 'Dr ') . $this->n($a['amt']) . ' in ' . $a['n'] . ' group(s)',
+                $tbl[] = ['name' => $a['name'], 'bsd' => !empty($acc['is_bsd']) ? 'yes' : '', 'legs' => ($a['side'] === 2 ? 'Cr ' : 'Dr ') . $this->n($a['amt']) . ' in ' . $a['n'] . ' group(s)',
                           '>closing' => $acc ? $this->drcr((float)$acc['closing']) : '?',
                           'where' => $acc ? (($gid && isset($snap->groups[$gid]) ? $snap->groups[$gid]['name'] : '(primary account)') . ' / ' . ($cats[(int)$acc['cat']] ?? 'category ' . $acc['cat'])) : ''];
             }
             CLI::write('  the accounts behind those legs (closing balance as on the report date, and where the report places them):');
-            $this->table($tbl, ['name' => 'account', 'legs' => 'legs that equal the differences', '>closing' => '>closing balance', 'where' => 'group / category'], 12, 46);
+            $this->table($tbl, ['name' => 'account', 'bsd' => 'bill sundry', 'legs' => 'legs that equal the differences', '>closing' => '>closing balance', 'where' => 'group / category'], 12, 46);
             $this->R['linked_explained_accounts'] = array_values($accs);
         }
     }
@@ -1287,6 +1306,32 @@ class AuditBooks extends BaseCommand
         if (!$rows) { CLI::write('  Profit & Loss (condensed view), line by line: the old code and the corrected one agree on every line.'); return; }
         CLI::write('  Profit & Loss (condensed view), the lines the correction changed (amounts as shown on the report, debit side / credit side):');
         $this->table($rows, ['line' => 'line', '>old' => '>old code', '>corrected' => '>corrected', '>change' => '>change'], 12);
+
+        // The old condensed view leaves out bill-sundry (tax) ledgers that sit under a profit & loss category (its code says "bill sundry data is pending").
+        $snap = $this->snap();
+        $cats = [11 => 'Purchase', 7 => 'Direct Expenses', 8 => 'Sales', 10 => 'Direct Income', 13 => 'Indirect Expenses', 12 => 'Indirect Income'];
+        $byCat = []; $bsd = [];
+        foreach ($snap->accounts as $a) {
+            if (empty($a['is_bsd']) || !AccountingEngine::isPlCat((int)$a['cat'])) { continue; }
+            $mv = round((float)$a['mv'], 2);
+            if ($mv == 0.0) { continue; }
+            $byCat[(int)$a['cat']] = ($byCat[(int)$a['cat']] ?? 0.0) + $mv;
+            $bsd[] = ['ledger' => strip_tags((string)$a['name']), 'cat' => $cats[(int)$a['cat']] ?? 'category ' . $a['cat'], '>movement' => $this->drcr($mv), 'abs' => abs($mv)];
+        }
+        if ($bsd) {
+            usort($bsd, fn($x, $y) => $y['abs'] <=> $x['abs']);
+            CLI::write('  bill-sundry (tax) ledgers that sit under a profit & loss category - the old condensed view leaves them out ("bill sundry data is pending" in its code):');
+            $this->table($bsd, ['ledger' => 'ledger', 'cat' => 'category', '>movement' => '>movement in the period'], 10, 46);
+            $explained = [];
+            foreach ($byCat as $cat => $sum) {
+                $label = $cats[$cat] ?? null; if ($label === null) { continue; }
+                $chg = round((float)($new[$label] ?? 0) - (float)($old[$label] ?? 0), 2);
+                $exp = round(in_array($cat, [11, 7, 13], true) ? $sum : -$sum, 2);
+                if (abs($chg) > 0.005 && abs($chg - $exp) <= 0.02) { $explained[] = "$label (" . $this->sn($chg) . ')'; }
+            }
+            if ($explained) { CLI::write('  Together they explain the change on: ' . implode(', ', $explained) . '.'); }
+            $this->R['legacy_pl_bill_sundry'] = ['ledgers' => array_map(fn($x) => ['ledger' => $x['ledger'], 'category' => $x['cat']], $bsd), 'explained' => $explained];
+        }
     }
 
     // ======================================================================================================

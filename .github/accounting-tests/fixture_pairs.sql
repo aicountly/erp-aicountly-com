@@ -78,4 +78,4 @@ INSERT INTO itemtxnmst (cmp_id, hobo_id, vch_txn_id, itm_id_unit_id, itm_txn_qty
  (1,1,21,'1_1',100,10000,1,1),(1,1,23,'1_1',500,50000,1,1);
 
 -- the branch is registered under the composition scheme (hobo_gstin_type 2)
-UPDATE hobomaster SET hobo_gstin_type = 2 WHERE cmp_id = 1 AND hobo_id = 1;
+INSERT INTO hobogstinm (cmp_id, hobo_id, hobo_gstin_type) VALUES (1, 1, 2);

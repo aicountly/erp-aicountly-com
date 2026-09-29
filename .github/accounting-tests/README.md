@@ -21,6 +21,7 @@ PHP 8.1+ CLI with `pgsql`, `zip`, `xml`, `mbstring`, `gd`; `node` for the export
 | suite | ledger | proves |
 |---|---|---|
 | `test_engine.php`, `test_pl.php`, `test_bs.php`, `test_tb.php` | basic | hand-computed figures: P&L net profit 28,200 in all six layouts, Balance Sheet 891,200 = 891,200, Trial Balance balances and every ledger equals independent SQL |
+| `test_pl_bsd.php` | basic + | bill-sundry (tax) ledgers directly under a profit & loss category (found on real data): the corrected report includes them in all six layouts, the old condensed view left them out |
 | `test_invariants.php` | stress | 312 identities over 8 scenarios (branch / consolidated, several periods): TB debit-credit = raw ledger imbalance, BS assets-liabilities = ledger imbalance, P&L identical in every layout, BS profit line = FY-to-date P&L |
 | `test_export.php` | stress | the REAL `Reportings` controller (page rows) against the REAL `Export` controller (xlsx and csv read back): 144 files, every cell, blanks, totals, notes |
 | `render_views.php` | stress / basic | the real report views render without PHP notices, the banner appears only when the ledger is out of balance, the Excel/CSV buttons build the right URL |
