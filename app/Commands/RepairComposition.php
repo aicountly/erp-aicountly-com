@@ -40,6 +40,8 @@ class RepairComposition extends BaseCommand
         '--to'          => 'Last date to include; the end of the financial year when left out.',
         '--csv'         => 'Write one line per planned change to this file.',
         '--no-rounding' => 'Leave differences of 0.05 or less alone instead of putting them on the largest tax leg.',
+        '--fy-start'    => 'Start of the financial year, if the year master cannot be read from here.',
+        '--fy-end'      => 'End of the financial year, if the year master cannot be read from here.',
         '--apply'       => 'Commit the changes. Without this nothing is written.',
     ];
 
@@ -63,10 +65,11 @@ class RepairComposition extends BaseCommand
         $this->bo  = $this->opt('branch') !== null ? (int)$this->opt('branch') : null;
         $this->db  = Database::connect();
 
-        $fyRow = $this->db->table('cmpfymastr')->where('cmp_id', $cmp)->where('cmpfymastr_id', $fy)->get()->getRowArray();
-        if (!$fyRow || empty($fyRow['fy_beg_date']) || empty($fyRow['fy_end_date'])) {
-            CLI::error("No financial year $fy for company $cmp (or it has no start / end date).");
+        $fyRow = $this->fyRow($cmp, $fy);
+        if (!$fyRow) {
+            CLI::error("Could not read financial year $fy of company $cmp.");
             CLI::write('  php spark audit:books --list   lists the companies and their financial years');
+            CLI::write('  or give the dates directly:    --fy-start 2024-04-01 --fy-end 2025-03-31');
             return 1;
         }
         $from = date('Y-m-d', strtotime((string)$fyRow['fy_beg_date']));
@@ -150,6 +153,46 @@ class RepairComposition extends BaseCommand
         CLI::write('  APPLIED and committed. Re-run `php spark audit:books` to see the reports on the repaired books.', 'green');
         CLI::write('  What is left is only what needs a person: ' . count($plan['review']) . ' entry group(s).');
         return 0;
+    }
+
+    // ==================================================================================================
+    //  the financial year
+    // ==================================================================================================
+
+    /**
+     * The financial year's start and end dates. The year master lives in the separate company database
+     * (`univaictly`) on a live installation and in the main one on some others, so both are tried; failing
+     * that, --fy-start and --fy-end can be given on the command line. Only these two dates are used, and
+     * the whole repair works on the ledger of the main database.
+     *
+     * @return array{fy_beg_date: string, fy_end_date: string}|null
+     */
+    private function fyRow(int $cmp, int $fy): ?array
+    {
+        foreach ([fn() => $this->univ(), fn() => $this->db] as $conn) {
+            try {
+                $c = $conn();
+                if (!$c) { continue; }
+                $r = $c->table('cmpfymastr')->where('cmp_id', $cmp)->where('cmpfymastr_id', $fy)->get()->getRowArray();
+                if ($r && !empty($r['fy_beg_date']) && !empty($r['fy_end_date'])) { return $r; }
+            } catch (\Throwable $e) { /* try the next connection */ }
+        }
+        $s = $this->opt('fy-start'); $e = $this->opt('fy-end');
+        if (is_string($s) && $s !== '' && is_string($e) && $e !== '' && strtotime($s) && strtotime($e)) {
+            CLI::write('  [INFO] the financial year master could not be read here; using the dates given on the command line', 'yellow');
+            return ['fy_beg_date' => $s, 'fy_end_date' => $e];
+        }
+        return null;
+    }
+
+    /** The separate company / financial-year database, or null when this installation has none. */
+    private function univ()
+    {
+        static $u = null;
+        if ($u === null) {
+            try { $u = (new \App\Libraries\externaldb())->univaictly_db(); } catch (\Throwable $e) { $u = false; }
+        }
+        return $u ?: null;
     }
 
     // ==================================================================================================

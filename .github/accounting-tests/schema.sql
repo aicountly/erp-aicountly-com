@@ -36,6 +36,13 @@ CREATE TABLE vchtxnconso (
   vch_txn_id serial PRIMARY KEY, cmp_id int, hobo_id int, txn_id int, vch_type_id int,
   vch_date date, acc_txn_type int DEFAULT 1, vch_sub_type_id int NULL, vch_series_id int NULL
 );
+-- On a live installation the company / financial-year masters are in a separate database. Here they are a
+-- view in the "univ" schema, which the harness gives the univaictly_db() connection as its search path, so
+-- code that reads the year master from the wrong connection can be caught.
+DROP SCHEMA IF EXISTS univ CASCADE;
+CREATE SCHEMA univ;
+CREATE VIEW univ.cmpfymastr AS SELECT * FROM public.cmpfymastr;
+
 CREATE INDEX ON accttxnmst (cmp_id, acc_id, acc_txn_date);
 CREATE INDEX ON undercrsmt (cmp_id, cmpfymastr_id, crs_mst_type, crs_mst_id);
 
