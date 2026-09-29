@@ -25,8 +25,11 @@ PHP 8.1+ CLI with `pgsql`, `zip`, `xml`, `mbstring`, `gd`; `node` for the export
 | `test_export.php` | stress | the REAL `Reportings` controller (page rows) against the REAL `Export` controller (xlsx and csv read back): 144 files, every cell, blanks, totals, notes |
 | `render_views.php` | stress / basic | the real report views render without PHP notices, the banner appears only when the ledger is out of balance, the Excel/CSV buttons build the right URL |
 | `test_rollover.php` | rollover | the REAL `FYModel` roll-over over three years: openings equal an independent computation and the opening trial balance nets to zero |
+| `test_audit.php` | stress / rollover / pairs | the read-only `audit:books` command: figures it reports equal the hand-known ones, the database is byte-identical afterwards, the year-end attribution adds up, and (pairs) vouchers are grouped with their linked composition-scheme journals, the row-by-row detail and the CSV are right, optional tables may be missing |
 | `demo_legacy_failures.php` | stress | the same identities against the OLD calculation (kept as `legacy_*`): it fails, which is the root cause of the mismatches |
 | `mutation_export.py` | stress | 13 deliberate breakages of the export path (swap debit/credit, drop a row, blank->0, abs(), lose a note, wrong nil_type / consolidated / view / dates ...) must each make `test_export.php` fail |
+
+`fixture_pairs.sql` models composition-scheme purchases: the purchase voucher credits the supplier with base + GST but debits only the base, and a linked type-23 system journal (vchbridgen type 3) carries the GST as a single debit to "GST PAID A/C" - some pairs balance, some do not, some have no link, one links to another year, and a type-1 (credit note) link must never merge groups.
 
 `fixture_stress.sql` holds the awkward real-world patterns found in the audit: a debit-only composition-scheme
 "GST PAID A/C" journal (voucher type 23), a voucher approved on one leg only, an unmapped ledger, a ledger whose group
@@ -58,6 +61,11 @@ php run_audit.php --company 1 --fy 1 --branch 1
 ```
 
 Use `php spark audit:books --list` on the server to see the company / financial-year / branch ids.
+
+When the ledger itself does not balance (section 2), the audit groups each unbalanced voucher with the vouchers it is linked to
+(composition-scheme "GST PAID A/C" system journals, `vchbridgen` link types 3/4/5) and says what is *still* unbalanced. Add
+`--vouchers 3` to print the ledger rows of the largest ones (and of some that balance thanks to their link), `--voucher ID,ID` for
+specific vouchers, and `--csv FILE` to write every unbalanced voucher, with its status, for the accountant.
 
 ## Run the audit on the server without deploying (private copy, live site untouched)
 
