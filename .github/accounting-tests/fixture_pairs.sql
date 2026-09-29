@@ -24,7 +24,10 @@ INSERT INTO undercrsmt (cmp_id,cmpfymastr_id,crs_mst_type,crs_mst_id,under_crs_m
   VALUES (1,1,1,117,0,13,0,1);                                     -- primary account under Indirect Expenses
 INSERT INTO acctmaster (acc_id, cmp_id, acc_name) VALUES (141,1,'CGST INPUT A/C'),(142,1,'SGST INPUT A/C'),(143,1,'Central Tax (Output)'),(144,1,'State Tax (Output)'),(145,1,'CESS INPUT A/C');
 INSERT INTO undercrsmt (cmp_id,cmpfymastr_id,crs_mst_type,crs_mst_id,under_crs_mst_id,crs_mst_parent_id,under_main_id,crs_mst_is_primary) VALUES
- (1,1,1,141,13,4,13,0),(1,1,1,142,13,4,13,0),(1,1,1,143,13,4,13,0),(1,1,1,144,13,4,13,0),(1,1,1,145,13,4,13,0);   -- under Duties & Taxes (Current Liabilities)
+ (1,1,1,141,13,4,13,0),(1,1,1,142,13,4,13,0),(1,1,1,145,13,4,13,0);   -- under Duties & Taxes (Current Liabilities)
+-- the two Output tax accounts are PRIMARY accounts under Indirect Expenses (a Profit & Loss category), as in one of the audited companies
+INSERT INTO undercrsmt (cmp_id,cmpfymastr_id,crs_mst_type,crs_mst_id,under_crs_mst_id,crs_mst_parent_id,under_main_id,crs_mst_is_primary) VALUES
+ (1,1,1,143,0,13,0,1),(1,1,1,144,0,13,0,1);
 INSERT INTO vchtypemst VALUES (11,'Purchase') ON CONFLICT DO NOTHING;
 
 CREATE TEMP TABLE v (vch int, dt date, acc int, dc int, amt numeric);

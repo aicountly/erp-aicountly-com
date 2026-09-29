@@ -472,7 +472,7 @@ class AuditBooks extends BaseCommand
         foreach ($list as $v) { if (abs($v['diff']) <= 0.05) { $tiny++; $tinyNet += $v['diff']; } }
         if ($tiny) { $this->check('imbalance_rounding', 'INFO', "$tiny of these voucher(s) differ by 0.05 or less each (rounding of tax / sundry lines), together " . $this->drcr($tinyNet) . '.'); }
         $gst = 0.0; foreach ($list as $v) { if ((int)$v['vch_type_id'] === 23) { $gst += $v['diff']; } }
-        $this->check('imbalance_gst', 'INFO', 'Part caused by GST PAID A/C system journals (voucher type 23, composition scheme): ' . $this->drcr($gst) . '; everything else: ' . $this->drcr($imb - $gst) . '.');
+        $this->check('imbalance_gst', 'INFO', 'Vouchers of type 23 (GST PAID A/C system journals) on their own: ' . $this->drcr($gst) . '; all other vouchers on their own: ' . $this->drcr($imb - $gst) . '. A purchase or sale and its linked journal belong together: the tables below give the combined figures.');
 
         $rows = [];
         foreach (array_slice($list, 0, $this->limit) as $v) { $rows[] = ['id' => $v['vch_txn_id'], 'date' => $v['vch_date'], 'type' => $this->vt($v['vch_type_id']), '>debit' => $this->n($v['dr']), '>credit' => $this->n($v['cr']), '>diff' => $this->drcr($v['diff'])]; }
@@ -723,6 +723,22 @@ class AuditBooks extends BaseCommand
             CLI::write('  the accounts behind those legs (closing balance as on the report date, and where the report places them):');
             $this->table($tbl, ['name' => 'account', 'bsd' => 'bill sundry', 'legs' => 'legs that equal the differences', '>closing' => '>closing balance', 'where' => 'group / category'], 12, 46);
             $this->R['linked_explained_accounts'] = array_values($accs);
+
+            // how much of the counted legs is inside the profit as booked: a credit on a Profit & Loss account raises it, a debit lowers it
+            $eff = ['pl' => ['cr' => 0.0, 'dr' => 0.0], 'bs' => ['cr' => 0.0, 'dr' => 0.0], 'none' => ['cr' => 0.0, 'dr' => 0.0]];
+            foreach ($accs as $a) {
+                $cat = (int)(($snap->accounts[$a['id']] ?? [])['cat'] ?? 0);
+                $where = AccountingEngine::isPlCat($cat) ? 'pl' : (in_array($cat, array_merge(AccountingEngine::BS_LIABILITY_CATS, AccountingEngine::BS_ASSET_CATS), true) ? 'bs' : 'none');
+                $eff[$where][$a['side'] === 2 ? 'cr' : 'dr'] += $a['amt'];
+            }
+            $plNet = round($eff['pl']['cr'] - $eff['pl']['dr'], 2);
+            $this->R['linked_explained_effect'] = ['profit_and_loss' => $eff['pl'], 'balance_sheet' => $eff['bs'], 'not_placed' => $eff['none'], 'profit_as_booked' => $plNet];
+            CLI::write(sprintf('  where the counted legs sit:  Profit & Loss accounts Cr %s / Dr %s - as booked they %s;  Balance Sheet accounts Cr %s / Dr %s%s',
+                $this->n($eff['pl']['cr']), $this->n($eff['pl']['dr']),
+                abs($plNet) < 0.005 ? 'do not change the profit' : (($plNet > 0 ? 'raise' : 'lower') . ' the profit by ' . $this->n(abs($plNet))),
+                $this->n($eff['bs']['cr']), $this->n($eff['bs']['dr']),
+                ($eff['none']['cr'] + $eff['none']['dr']) > 0 ? sprintf(';  in no group: Cr %s / Dr %s', $this->n($eff['none']['cr']), $this->n($eff['none']['dr'])) : ''));
+            CLI::write('  (this says what those legs contribute today; it is not a proposal - which leg of a group is the wrong one is an accounting decision)', 'light_gray');
         }
     }
 
