@@ -1,0 +1,97 @@
+<html lang="en"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ai Countly::Under Upgradation</title>
+   <link href="https://sandbox.aicountly.in/public/assets/css/theme.min.css" rel="stylesheet" crossorigin="anonymous">
+  <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">-->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600&amp;family=Oswald:wght@400;700&amp;display=swap" rel="stylesheet">
+  <style>
+ img{width:auto;max-width: 100%;height: auto;}
+      body{font-family: 'Oswald', sans-serif;  background-color:#155490; background:url(https://sandbox.aicountly.in/public/assets/img/page-bg.jpg) no-repeat center center; background-size:cover;}
+      .container{max-width:1200px;}
+      h1{font-weight:bold;font-family: 'Oswald', sans-serif; font-size:60px; text-transform:uppercase; margin:30px 0px;}
+      .timer{font-size:50px; z-index:99; position:relative; font-weight:bold; text-align:center; font-family:'Open Sans';}
+      .timer p{display:inline-block; position:relative; margin:6px; background:#F3BE0C; color:#000; width:100px; border-radius:10px;}
+      .timer p::before{position:absolute; content:''; left:0; right:0; top:48%; height:1px; background:#F8D21F;}
+      .timer p small{display:block; font-size:18px; font-weight:400; padding-bottom:5px;}
+      .dotsimg{position:absolute; left:-40px; bottom:-40px; height:auto; max-width:350px; opacity:.4;}
+      
+      @media screen and (max-width:767px) {
+          h1{font-size:49px;}
+          .timer{font-size:40px;}
+          .timer p{width:60px;}
+      }
+          
+ </style></head>
+  
+  <body>
+      <div class="container"><div class="row m-0 vh-100 align-content-center"><div class="col-md-6 p-md-5 p-2 bg-white"><div class="position-relative">
+   <p class="text-center"> <img src="https://sandbox.aicountly.in/public/assets/img/logo.png" style="width:220px;"></p>
+   
+   <h1 class="text-center pb-4">Will be Back Soon</h1>
+   <div class="timer" id="timer">
+      <p>01<small>days</small></p>
+      <p>22<small>hours</small></p>
+      <p>25<small>min</small></p>
+      <p>52<small>sec</small></p>
+   </div>
+    
+    <img src="https://sandbox.aicountly.in/public/assets/img/dots-circle.png" class="dotsimg">
+    </div></div>
+    <div class="col-md-6 text-center p-2 d-md-block bg-white d-none">
+       <br><br> <img src="https://sandbox.aicountly.in/public/assets/img/under-construction.png">
+    </div>
+    
+    </div></div>
+  
+<script>
+var currentdate = new Date(); 
+var datetime = "Last Sync: " + currentdate.getDate() + "/"
+                + (currentdate.getMonth()+1)  + "/" 
+                + currentdate.getFullYear() + " @ "  
+                + currentdate.getHours() + ":"  
+                + currentdate.getMinutes() + ":" 
+                + currentdate.getSeconds();
+                
+console.log(datetime);
+
+// Set the date we're counting down to
+var countDownDate = new Date("Jan 6, 2024 23:00:00").getTime();
+
+// Update the count down every 1 second
+var x = setInterval(function() {
+
+  // Get today's date and time
+  var now = new Date().getTime();
+    
+  // Find the distance between now and the count down date
+  var distance = countDownDate - now;
+    
+  // Time calculations for days, hours, minutes and seconds
+  var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+  var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+  var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+  var html = `
+      <p>${days}<small>days</small></p>
+      <p>${hours}<small>hours</small></p>
+      <p>${minutes}<small>min</small></p>
+      <p>${seconds}<small>sec</small></p>
+  `;
+    
+  // Output the result in an element with id="demo"
+  // document.getElementById("demo").innerHTML = days + "d " + hours + "h "
+  // + minutes + "m " + seconds + "s ";
+  document.getElementById("timer").innerHTML = html;
+    
+  // If the count down is over, write some text 
+  if (distance < 0) {
+    clearInterval(x);
+    document.getElementById("timer").innerHTML = "Something went wrong";
+  }
+}, 1000);
+</script>
+</body></html>

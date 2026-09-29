@@ -1,0 +1,21 @@
+[
+    {
+        "label": "GST Paid",
+        "value": "GST Paid",
+        "id": "1368",
+        "account_id": "1368",
+        "acc_id": "1368",
+        "is_sundry": "1",
+        "is_acc": "0",
+        "is_bbb": 0,
+        "is_cc": 1,
+        "tx_ct_id": "153",
+        "bl_sply_tpe": "1",
+        "bl_hsn_sac": "",
+        "bl_tx_rte": 0,
+        "bl_ipt_ott": "1",
+        "bl_nature": "0",
+        "tax_cat_id": "153",
+        "is_tax_account": 0
+    }
+]

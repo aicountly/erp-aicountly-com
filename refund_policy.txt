@@ -1,0 +1,84 @@
+<div class="container content py-5">
+   
+ <h5>Customer Satisfaction Policy at Aicountly </h5>  
+ <p>At, Aicountly, we strive to offer you a quality software (herein after termed Software or SaaS Products or products or software services) Providing quick, cost-effective, and helpful solutions for your professional and commercial life. We are also determined to provide you inexpensive, specialized pre- and post-sales, supplementary services, and consulting (collectively referred to as services). Given the variety of choices on the market, we value and are grateful for your patronage. We have created this policy to outline what will happen if we fall short of your expectations or if they are outside the realm of what we can reasonably achieve. </p>
+ <br><br>
+<h5>Subscriptions Cancellation</h5>
+Please let us know about your concerns if you have any within the stipulated time that you use our product. We will make every effort to resolve your issue, offer a workable solution, or provide a timeframe for a solution that will satisfy your needs. If you are still not satisfied, we will gladly give you a full refund for your purchase and downgrade your account to the service's free plan with finite access.<br><br> 
+
+Each product has an online demo so that you may completely assess it before choosing to buy. If a product doesn't have a demo, you may still learn more about it and determine whether it will meet your needs by viewing visual previews and video materials.
+<br><br>
+<h5>Return Policy</h5>
+At Aicountly Platform we just want you to be satisfied with our services. We also go beyond that; if at any point throughout the term of your contract we delete, alter, or stop providing functionality that was offered at the time you signed your contract, please let us know as soon as possible. We will provide you with a refund for the remainder of the contract if we are unable to resolve it to your satisfaction in a timely way. At aicountly.com, if the user is not satisfied and want to cancel the subscription, we will initiate refund, up to 100% of your money, subject to stipulated conditions- <br>
+<table class="table">
+	<tbody>
+		<tr>
+			<th>Service Termination (Time Interval) </th><th>% of Fees to be Refunded </th>
+			</tr>
+			<tr>
+			<td>Within 15 Calendar Days </td><td>100%</td>
+		</tr>
+		<tr>
+			<td>Beyond 15 Calendar Days </td><td>NIL</td>
+		</tr>
+	</tbody>
+</table>
+<br>
+<ol>
+	<li>All services will be available as per the Subscription / Product subscribed by the user, duly listed at aicountly.com or its associated sites.</li>
+	<li>Services will be accessible, subject to realization of payment as per terms of payment listed along with product plan at aicountly.com or its associated sites.</li>
+	<li>Before cancelling the services, any money spent on government fees or administrative costs will be subtracted from the payments.</li>
+	<li>Only a written submission, accompanied by a good explanation for cancelling the services will be taken into consideration. 20% more costs will be kept as advisory fees beyond cancellation terms if there is no good justification.</li>
+	<li>Aicountly reserves the right to make changes to the policy, periodically, without any prior Notice.</li>
+	<li>Only the Chandigarh Jurisdictional Court shall have jurisdiction over all matters.</li>
+</ol><br><br>
+<h5>Return in case of customization of any product</h5>
+As you know that we are a web-based software and products are standard on global-basis. However, in some cases, based on your requirement we may have to do customization development of some features specific to your needs. We may have to charge additional fee for the customization over and above the standard price. Upon your acceptance to the customization, our deliverables are completed. In such case we will not be able to process any refund. 
+<br><br>
+<h5>Auto-Renewal </h5>
+
+Your subscriptions will automatically renew until you decide to terminate the service for your convenience. Every time your subscription renews on its own, we will email you to let you know how much will be charged to your account using the chosen payment method. Products will only be renewed if payment has been received. In a similar manner, we will email you a receipt following each renewal that details the amount that was deducted in addition to the date and cost of the subsequent renewal. 
+<br><br>
+We are aware that occasionally clients fail to cancel a service or product and decide not to continue after the transaction has been made. If you wish to cancel the renewal of the product under such circumstances, please contact us. We will still process your cancellation and issue a Full Refund, subject to the condition, that the request is being received within 48 hours of renewal. 
+<br><br>
+<h5>Exception to our Refund Policy </h5>
+Please note that we will not entertain a request for refund (Full or Pro-Rated) when we have suspended or terminated your access to Aicountly Services/products due to a violation of our Terms of Service. 
+<br><br>
+<h5>Grievance </h5>
+If you have any questions, please e-mail at grievance@sispl.org 
+<table class="table">
+		<tbody>
+			<tr>
+				<td>Name:</td>
+				<td>Shraddha Dwivedi</td>
+			</tr>
+			<tr>
+				<td>
+				Email:</td>
+				<td>
+				<a href="mailto:shraddha@sispl.org">shraddha@sispl.org</a>	</td>
+			</tr>
+			<tr>
+				<td>Address:</td>
+				<td>Shivansh Interactive Services Pvt Ltd 
+
+3069-B, Third Floor, Ajanta Enclaves, Sector-51D,  
+
+Chandigarh - 160047 
+				</td>
+			</tr>
+		</tbody>
+	</table>
+	<br><br>
+	Please remember to include the following details in your correspondence with us so that we can address your complaint or issue in a timely manner: 	<br>
+<ol>
+<li>The product's name, expiration date, amount paid, and sales agent's name, as well as a description of the complaint's nature. </li>
+
+<li>Date and time (if applicable) </li>
+<li>your name and registered mobile &amp; email. </li>
+<li>Please be aware that Aicountly will be unable to investigate the complaint/grievance if any pertinent information is absent.</li> 
+ </ol>
+
+No guarantee or promise is made by Aicountly about the removal or accurate correction of any offensive content. The Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, will be followed to handle any content concerns. 
+	
+</div>

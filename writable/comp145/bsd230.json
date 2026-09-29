@@ -1,0 +1,21 @@
+[
+    {
+        "label": "Round Off",
+        "value": "Round Off",
+        "id": "10755",
+        "account_id": "10755",
+        "acc_id": "10755",
+        "is_sundry": "1",
+        "is_acc": "0",
+        "is_bbb": 0,
+        "is_cc": 1,
+        "tx_ct_id": "623",
+        "bl_sply_tpe": "1",
+        "bl_hsn_sac": "",
+        "bl_tx_rte": 0,
+        "bl_ipt_ott": "0",
+        "bl_nature": "1",
+        "tax_cat_id": "623",
+        "is_tax_account": 0
+    }
+]

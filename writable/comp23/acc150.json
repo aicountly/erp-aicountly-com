@@ -1,0 +1,26 @@
+[
+    {
+        "label": "Profit & Loss Appropriation",
+        "value": "Profit & Loss Appropriation",
+        "id": "1003",
+        "acc_id": "1003",
+        "is_sundry": 0,
+        "is_acc": 1,
+        "is_bbb": 0,
+        "is_cc": 0,
+        "is_cash": 0,
+        "cannotselected": 1,
+        "igst_rate": null,
+        "cess_rate": null,
+        "cgst_rate": null,
+        "sgst_rate": null,
+        "tax_cat_id": 0,
+        "item_hsn_sac": null,
+        "acc_state": "",
+        "acc_country": "",
+        "state_code": "",
+        "cess_basis": 1,
+        "supply_type": "",
+        "acc_short_code": ""
+    }
+]

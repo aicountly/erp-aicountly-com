@@ -1,0 +1,114 @@
+<?php $header = array('title' => 'Add Cost Centre' ); ?>
+<?php echo view('includes/header',$header); ?>
+<style>
+    .myform .col-12{padding:6px 0px;}
+    .myform label{width:25%; float:left;}
+    .myform .form-control, .myform select {width:75%;}
+</style>	  
+
+<?php $attributes = " id='myform' name='myform' class='needs-validation myform' novalidate";
+    echo form_open(base_url().'/'.$folder_path.'cost_centres/add_cc', $attributes);
+?>
+    
+<div class=" row">
+    
+    <div class="col-6"><h3 class="pb-3">Cost Centre</h3></div> 
+    <div class="col-6"><span class="float-end"><a href="<?php echo history_back();?>" class="btn btn-sm btn-outline-success">« Back</a></span></div> 
+    
+    <div class="col-md-12">
+        <?php if (session()->getFlashdata('error_message')) { ?>
+                <div class="alert alert-danger alert-dismissible fade show">
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <?php echo session()->getFlashdata('error_message'); ?>
+                </div>
+        <?php } ?>
+    </div>
+    
+    
+    <div class="col-md-6">
+        <div class="card p-4 my-2">
+        <h5 class="pb-2">General Info</h5>
+    
+        
+        <div class="col-12">
+            <label>Name</label>
+            <input type="text" name="cc_name" value="<?= set_value("cc_name") ?>" class="form-control" required>
+        </div>
+        <div class="col-12">
+            <label>Alias</label> 
+            <input type="text" name="cc_alias" value="<?= set_value("cc_alias") ?>" class="form-control" required>
+        </div>
+        <div class="col-12">
+            <label>Print</label> 
+            <input type="text" name="cc_print" value="<?= set_value("cc_print") ?>" class="form-control" required>
+        </div>
+        
+        <div class="col-12">
+            <label>Under</label>
+            <div class="w-75 d-inline-block">
+            <?php	echo form_dropdown('cc_grp_id', $user_groups_dropdown, set_value('cc_grp_id') ,'id="cc_grp_id" class="form-control selectwidget required" required ');?>	
+            </div> 
+        </div>
+        
+        
+        
+    
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card p-4 my-2">
+            <h5 class="pb-2">Payment Info</h5>
+            
+            <div class="col-12">
+                <label>OP. Bal</label>
+                <div class="input-group w-75">
+                    <input type="number" step="0.01" name="cc_op_bal" id="cc_op_bal" value="<?= !empty(set_value('cc_op_bal')) ? set_value('cc_op_bal') : '0.00' ?>" class="form-control" >
+                    
+                    <span class="input-group-text">
+                        <input type="radio" name="cc_op_drcr" value="cr" class="form-check-input">&nbsp;Cr. &nbsp;&nbsp;&nbsp;
+                        <input type="radio" name="cc_op_drcr" value="dr" class="form-check-input" checked>&nbsp;Dr.
+                    </span>
+                </div>
+            </div>
+            <div class="col-12">
+                <label>PY. Bal</label>
+                <div class="input-group w-75">
+                    <input type="number" step="0.01" name="cc_py_bal" id="cc_py_bal" value="<?= !empty(set_value('cc_py_bal')) ? set_value('cc_py_bal') : '0.00' ?>" class="form-control" >
+                    
+                    <span class="input-group-text">
+                        <input type="radio" name="cc_py_drcr" value="cr" class="form-check-input">&nbsp;Cr. &nbsp;&nbsp;&nbsp;
+                        <input type="radio" name="cc_py_drcr" value="dr" class="form-check-input" checked>&nbsp;Dr.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <div class="col-md-12  text-center">
+        <input type="submit" value="SAVE" class="btn btn-primary mr-1" id="submitbtn" title="<?php echo $_ENV['SAVEKEY_SRTCDE'];?>" alt="<?php echo $_ENV['SAVEKEY_SRTCDE'];?>">
+        <a href="<?php echo $base_url.'cost_centres/list_group';?>" class="btn btn-secondary">QUIT</a>
+    </div>
+    
+    
+    
+</div>
+</form>
+
+<?php echo view('includes/footer_scripts'); ?>
+<script>
+    $(document).on('blur','[name="cc_name"]', function(){
+    var name = $(this).val().trim();
+    if(name){
+        if(!$('[name="cc_alias"]').val().trim())
+        {
+           $('[name="cc_alias"]').val(name); 
+        }
+        if(!$('[name="cc_print"]').val().trim())
+        {
+           $('[name="cc_print"]').val(name); 
+        }
+    }
+    });
+</script>

@@ -1,0 +1,297 @@
+<?php 
+
+  function connectdb($company_db,$hostname,$username,$password,$port){
+	    $config_app['DSN']      = '';
+        $config_app['hostname'] = $hostname;
+        $config_app['username'] = $username;
+        $config_app['password'] = $password;
+        $config_app['database'] = $company_db;
+        $config_app['DBDriver'] = 'MySQLi';
+        $config_app['DBPrefix'] = '';
+        $config_app['pConnect'] = false;
+        $config_app['DBDebug']  = (ENVIRONMENT !== 'production');
+        $config_app['charset']  ='utf8';
+        $config_app['DBCollat'] = 'utf8_general_ci';
+        $config_app['swapPre']  = '';
+        $config_app['encrypt']  = false;
+        $config_app['compress'] = false;
+        $config_app['strictOn'] = false;
+        $config_app['failover'] = [];
+        $config_app['port']     = $port;		
+		$comp_db = \Config\Database::connect($config_app);		 
+	return $comp_db;
+  }
+  
+function AccountGroupTypes(){
+	$master_type_list       = array();	
+	$master_type_list['1']  = 'Capital Account'; 
+	$master_type_list['2']  = 'Secured Loan'; 
+	$master_type_list['3']  = 'Unsecured Loan'; 
+	$master_type_list['4']  = 'Current Liability'; 
+	$master_type_list['5']  = 'Fixed Asset'; 
+	$master_type_list['6']  = 'Current Asset'; 
+	$master_type_list['7']  = 'Opening Stock'; 
+	$master_type_list['8']  = 'Purchase'; 
+	$master_type_list['9']  = 'Sales'; 
+	$master_type_list['10'] = 'Closing Stock';	
+	$master_type_list['11'] = 'Direct income'; 
+	$master_type_list['12'] = 'Direct Expenses '; 
+	$master_type_list['13'] = 'Indirect Income '; 
+	$master_type_list['14'] = 'Indirect Expenses';
+	return $master_type_list; 
+ }
+ 
+ function industry_type_list(){
+	$industry_types        = array();	
+	$industry_types['1']   = 'Accounting service'; 
+	$industry_types['2']   = 'Agriculture & Allied Industries'; 
+	$industry_types['3']   = 'Auto Components'; 	
+	$industry_types['4']   = 'Automobile'; 
+	$industry_types['5']   = 'Aviation'; 
+	$industry_types['6']   = 'Banking'; 
+	$industry_types['7']   = 'Biotechnology'; 
+	$industry_types['8']   = 'Cement';	
+	$industry_types['9']   = 'Chemical';
+	$industry_types['10']  = 'Consumer Durables';
+	$industry_types['11']  = 'Cosmetics & Toiletries'; 
+	$industry_types['12']  = 'Defence Manufacturing'; 
+	$industry_types['13']  = 'E-commerce';
+	$industry_types['14']  = 'Education & training';
+	$industry_types['15']  = 'Electronics System Design & Manufacturing';	
+	$industry_types['16']  = 'Engineering & Capital goods';
+	$industry_types['17']  = 'Financial Services';
+	$industry_types['18']  = 'FMCG';
+	$industry_types['19']  = 'Fertilizers';	
+	$industry_types['20']  = 'Gems & Jewellery';
+	$industry_types['21']  = 'Healthcare '; 
+	$industry_types['22']  = 'Infrastructure'; 
+	$industry_types['23']  = 'Insurance'; 	
+	$industry_types['24']  = 'Insecticides'; 
+	$industry_types['25']  = 'IT & BPM'; 
+	$industry_types['26']  = 'Manufacturing'; 
+	$industry_types['27']  = 'Media & Entertainment'; 
+	$industry_types['28']  = 'Medical Device';	
+	$industry_types['29']  = 'Metal & Mining';
+	$industry_types['30']  = 'MSME';
+	$industry_types['31']  = 'Oil & gases'; 
+	$industry_types['32']  = 'Pharmaceuticals'; 
+	$industry_types['33']  = 'Ports';
+	$industry_types['34']  = 'Plantation Product ';
+	$industry_types['35']  = 'Power';	
+	$industry_types['36']  = 'Railway';
+	$industry_types['37']  = 'Real Estate';
+	$industry_types['38']  = 'Renewable Energy';
+	$industry_types['39']  = 'Retail ';	
+	$industry_types['40']  = 'Roads';
+	$industry_types['41']  = 'Science & Technology ';
+	$industry_types['42']  = 'Steel';	
+	$industry_types['43']  = 'Shaving Systems ';
+	$industry_types['44']  = 'Telecommunication ';
+	$industry_types['45']  = 'Textiles';
+	$industry_types['46']  = 'Tourism & Hospitality ';	
+	return $industry_types;  
+	 
+   }
+  function VoucherMasterTypes(){
+	$master_type_list        = array();	
+	$master_type_list['1']   = 'Contra'; 
+	$master_type_list['2']   = 'Credit Note'; 
+	$master_type_list['3']   = 'Debit Note'; 	
+	$master_type_list['4']   = 'Delivery Note'; 
+	$master_type_list['5']   = 'Journal'; 
+	$master_type_list['6']   = 'Material In'; 
+	$master_type_list['7']   = 'Material Out'; 
+	$master_type_list['8']   = 'Memorandum';	
+	$master_type_list['9']   = 'Payment';
+	$master_type_list['10']  = 'Physical Stock';
+	$master_type_list['11']  = 'Purchase'; 
+	$master_type_list['12']  = 'Purchase Order'; 
+	$master_type_list['13']  = 'Receipt';
+	$master_type_list['14']  = 'Receipt Note ';
+	$master_type_list['15']  = 'Register in';	
+	$master_type_list['16']  = 'Register out';
+	$master_type_list['17']  = 'Reverse Journal';
+	$master_type_list['18']  = 'Sales';
+	$master_type_list['19']  = 'Sales order ';	
+	$master_type_list['20']  = 'Sales journal ';
+	return $master_type_list; 
+ }
+ 
+ function DealerTypes(){
+	$dealer_type_list      = array();
+	$dealer_type_list['']  = 'Choose';
+	$dealer_type_list['1'] = 'Registered'; 
+	$dealer_type_list['2'] = 'Un-Registered'; 
+	$dealer_type_list['3'] = 'Composition'; 
+	$dealer_type_list['4'] = 'Govt. Body'; 
+	$dealer_type_list['5'] = 'UIN Holder'; 
+	return $dealer_type_list; 
+ }
+ 
+  function natureof_work_lists(){
+	$natureof_work_lists      = array();
+	$natureof_work_lists['']  = 'Select';
+	$natureof_work_lists['1'] = 'Accountant ';
+	$natureof_work_lists['2'] = 'CA ';
+	$natureof_work_lists['3'] = 'Distributor';
+	$natureof_work_lists['4'] = 'Distributor';
+	$natureof_work_lists['5'] = 'Retailer ';	
+	$natureof_work_lists['6'] = 'Service Provider  ';
+	$natureof_work_lists['7'] = 'STP ';
+	$natureof_work_lists['8'] = 'Trader ';
+	return $natureof_work_lists;  	
+  }
+ function user_type_array()
+	{ 
+       $user_type_array = array();
+	   $user_type_array['']=' Select user type ';
+ 	   $user_type_array['A'] ='Admin';
+	   $user_type_array['C'] ='Client';
+	   $user_type_array['O'] ='Company';
+	   return $user_type_array;
+	} 
+ function price_format( $price ) {
+  if(trim($price)!=='' && $price!='0')
+  {
+    $price =  round($price,2);
+    $price = '$'.number_format($price,2,".",",");
+	
+    return $price;
+  }
+  else
+   {
+     return "";
+   }
+  
+}
+
+function months_list(){
+    $all_months = array();
+    $all_months[''] ='Choose Month';
+    for ($m=1; $m<=12; $m++) {
+     $month  = date('F', mktime(0,0,0,$m, 1, date('Y')));
+     
+     if($m<=9)
+     $show_m = '0'.$m;
+     else
+     $show_m = $m;
+     $all_months[$show_m] = $month;
+     }
+   return $all_months; 
+}
+
+
+function AmountInWords(float $amount)
+{
+   $amount_after_decimal = round($amount - ($num = floor($amount)), 2) * 100;
+   // Check if there is any number after decimal
+   $amt_hundred = null;
+   $count_length = strlen($num);
+   $x = 0;
+   $string = array();
+   $change_words = array(0 => '', 1 => 'One', 2 => 'Two',
+     3 => 'Three', 4 => 'Four', 5 => 'Five', 6 => 'Six',
+     7 => 'Seven', 8 => 'Eight', 9 => 'Nine',
+     10 => 'Ten', 11 => 'Eleven', 12 => 'Twelve',
+     13 => 'Thirteen', 14 => 'Fourteen', 15 => 'Fifteen',
+     16 => 'Sixteen', 17 => 'Seventeen', 18 => 'Eighteen',
+     19 => 'Nineteen', 20 => 'Twenty', 30 => 'Thirty',
+     40 => 'Forty', 50 => 'Fifty', 60 => 'Sixty',
+     70 => 'Seventy', 80 => 'Eighty', 90 => 'Ninety');
+    $here_digits = array('', 'Hundred','Thousand','Lakh', 'Crore');
+    while( $x < $count_length ) {
+      $get_divider = ($x == 2) ? 10 : 100;
+      $amount = floor($num % $get_divider);
+      $num = floor($num / $get_divider);
+      $x += $get_divider == 10 ? 1 : 2;
+      if ($amount) {
+       $add_plural = (($counter = count($string)) && $amount > 9) ? 's' : null;
+       $amt_hundred = ($counter == 1 && $string[0]) ? ' and ' : null;
+       $string [] = ($amount < 21) ? $change_words[$amount].' '. $here_digits[$counter]. $add_plural.' 
+       '.$amt_hundred:$change_words[floor($amount / 10) * 10].' '.$change_words[$amount % 10]. ' 
+       '.$here_digits[$counter].$add_plural.' '.$amt_hundred;
+        }
+   else $string[] = null;
+   }
+   
+   $implode_to_Rupees = implode('', array_reverse($string));
+   $get_paise = ($amount_after_decimal > 0) ? "And " . ($change_words[$amount_after_decimal / 10] . " 
+   " . $change_words[$amount_after_decimal % 10]) . ' Paise' : '';
+   return ($implode_to_Rupees ? $implode_to_Rupees . 'Rupees ' : '') . $get_paise;
+}
+
+
+if(!function_exists('randomPassword')) {
+      //generates a random password of length minimum 8 
+//contains at least one lower case letter, one upper case letter,
+// one number and one special character, 
+//not including ambiguous characters like iIl|1 0oO 
+	function randomPassword($len = 8) {
+
+		//enforce min length 8
+		if($len < 8)
+			$len = 8;
+		
+		//define character libraries - remove ambiguous characters like iIl|1 0oO
+		$sets     = array();
+		$sets[]   = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+		$sets[]   = 'abcdefghjkmnpqrstuvwxyz';
+		$sets[]   = '23456789';
+		$sets[]   = '~!@#$%^&*(){}[],./?';
+		$password = '';
+		
+		//append a character from each set - gets first 4 characters
+		foreach ($sets as $set) {
+			$password .= $set[array_rand(str_split($set))];
+		   }
+
+		//use all characters to fill up to $len
+		while(strlen($password) < $len) {
+			//get a random set
+			$randomSet = $sets[array_rand($sets)];
+			
+			//add a random char from the random set
+			$password .= $randomSet[array_rand(str_split($randomSet))]; 
+		}
+		
+		//shuffle the password string before returning!
+		return str_shuffle($password);
+	}
+	
+	
+	
+function dateDiff($entry_time, $today)
+	{
+	$date1 = new DateTime($entry_time);
+	$date2 = new DateTime($today);
+	$interval = $date1->diff($date2);
+	if ($interval->y > 0) $post_time = $interval->y." years";
+	elseif ($interval->m > 0) $post_time = $interval->m." months";
+	elseif ($interval->d > 0) $post_time = $interval->d." days";
+//	elseif ($interval->h > 0) $post_time = $interval->h." hours ago";
+//	elseif ($interval->i > 0) $post_time = $interval->i." minutes ago";
+//	elseif ($interval->s > 0) $post_time = $interval->s." seconds ago";
+	else $post_time = "just now";
+	if($interval->m >0 && $interval->d >0)
+	return $interval->m." months ,".$interval->d." days";
+	else if($interval->m >0)
+	   return $interval->m." months ";
+	else if($interval->d >0)
+	return $interval->d." days";   
+	}
+  function load_comp_vouchers(){
+	   $db      = \Config\Database::connect();
+	   $session = \Config\Services::session();
+	   $final_result      = array();
+	   $comp_code         = $session->get('ses_company_code');
+	   if($comp_code!=''){
+	   $data              = $db->table('comp_voucher_master')->where('comp_code',$comp_code)->orderBy('comp_vch_name')->get()->getResultArray();	  
+	   if($data){
+		  foreach($data as $row){
+              $final_result[$row['comp_voucher_id']] = ucwords(strtolower($row['comp_vch_name']));			   
+	        }
+           }	    	   
+          }	
+          return $final_result;	   
+       }	
+}

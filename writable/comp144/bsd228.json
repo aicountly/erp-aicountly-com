@@ -1,0 +1,40 @@
+[
+    {
+        "label": "CESS (GST) OUTPUT A\/C",
+        "value": "CESS (GST) OUTPUT A\/C",
+        "id": "22006",
+        "account_id": "22006",
+        "acc_id": "22006",
+        "is_sundry": "1",
+        "is_acc": "0",
+        "is_bbb": 0,
+        "is_cc": 0,
+        "tx_ct_id": "0",
+        "bl_sply_tpe": "",
+        "bl_hsn_sac": "",
+        "bl_tx_rte": 0,
+        "bl_ipt_ott": "2",
+        "bl_nature": "0",
+        "tax_cat_id": "0",
+        "is_tax_account": 1
+    },
+    {
+        "label": "IGST INPUT A\/C",
+        "value": "IGST INPUT A\/C",
+        "id": "22005",
+        "account_id": "22005",
+        "acc_id": "22005",
+        "is_sundry": "1",
+        "is_acc": "0",
+        "is_bbb": 0,
+        "is_cc": 0,
+        "tx_ct_id": "0",
+        "bl_sply_tpe": "",
+        "bl_hsn_sac": "",
+        "bl_tx_rte": 0,
+        "bl_ipt_ott": "1",
+        "bl_nature": "0",
+        "tax_cat_id": "0",
+        "is_tax_account": 1
+    }
+]

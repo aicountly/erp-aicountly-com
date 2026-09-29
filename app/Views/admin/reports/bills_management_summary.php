@@ -1,0 +1,393 @@
+<?php $header = array( 	'title' => 'Bill Wise Summary' ); ?>
+<?php echo view('includes/header',$header); ?>
+
+    <!-- delete it -->
+
+
+<div class="row mb-md-0 mb-3">
+    <div class="col-md-6"><h3 class="pb-3">Bill Wise Summary</h3></div>
+    <div class="col-md-6 text-end"><div class="taskmenus">
+        <a href="javascript:void(0)" id="refresh_grid"><span class="material-symbols-outlined">refresh</span></a>
+        <a data-bs-toggle="offcanvas" href="#moreoptions" role="button" aria-controls="moreoptions"><span class="material-symbols-outlined">offline_bolt</span></a> 
+        <a href="#"><span class="material-symbols-outlined">print</span></a>
+        <a href="#" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined"><span class="material-symbols-outlined">download</span></span></a>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#">CSV</a></li>
+            <li><a class="dropdown-item" href="#">Excel</a></li>
+            <li><a class="dropdown-item" href="#">Document</a></li>
+          </ul>
+        <a href="#" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">share</span></a> 
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#">Facebook</a></li>
+            <li><a class="dropdown-item" href="#">Twitter</a></li>
+            <li><a class="dropdown-item" href="#">Instagram</a></li>
+        </ul>
+       
+    </div>
+    </div>
+</div>
+<div class="row mb-2 align-items-top">
+    <div class="col-lg-5">
+        <form class="form needs-validation" method="get" id="salefrm" autocomplete="off" novalidate>
+        <div class="input-group">
+            <span class="input-group-text px-1">From</span>
+            <input type="text" name="from_date" value="<?php echo $from_date;?>" class="datepicker form-control p-2" required  style="width:90px;">
+            
+            <span class="input-group-text px-1">To</span>
+            <input type="text" name="to_date" value="<?php echo $to_date;?>" class="datepicker form-control p-2" required style="width:90px;">
+            
+            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#calendarmodal">
+             <span class="material-symbols-outlined">event</span>
+            </button>
+            
+            <input type="submit" class="btn btn-sm btn-success" value="GO">
+        </div>
+        </form>
+    </div>
+    <div class="col-lg-7 text-end">
+        
+        <div class="dropdown float-end">
+            <button class="btn btn-success btn-sm dropdown-toggle mt-0 m-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"> Add Ons </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item ontrashmode" href="javascript:void(0);">Trash Mode</a></li>
+               
+            </ul>
+            <button class="btn btn-success btn-sm dropdown-toggle mt-0 m-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"> Voucher Series </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#">Action</a></li>
+                <li><a class="dropdown-item" href="#">Another action</a></li>
+                <li><a class="dropdown-item" href="#">Something else here</a></li>
+            </ul>
+             <a href="<?php echo history_back();?>" class="btn btn-sm btn-outline-success mt-0 m-1">Back</a>
+        </div>
+    </div>
+</div>
+<div class="modal fade mt-5 modal-lg" id="calendarmodal" tabindex="-1" aria-labelledby="calendarmodallabel" style="display: none;" aria-hidden="true">
+     <div class="modal-dialog">
+        <div class="modal-content">
+  
+            <div class="col-12 calccard card m-auto">
+                <form class="form" method="get" id="salefrm2" autocomplete="off">
+                <div class="row p-4">
+                    
+                    <div class="comp_calender col-md-6">
+                        <button class="btn btn-light">APR</button>
+                        <button class="btn btn-light">JUL</button>
+                        <button class="btn btn-light">OCT</button>
+                        <button class="btn btn-light">JAN</button>
+                        <button class="btn btn-light">MAY</button>
+                        <button class="btn btn-light">AUG</button>   
+                        <button class="btn btn-light">NOV</button> 
+                        <button class="btn btn-light">FEB</button>
+                        <button class="btn btn-light">JUN</button>
+                        <button class="btn btn-light">SEP</button>
+                        <button class="btn btn-light">DEC</button>
+                        <button class="btn btn-light">MAR</button>
+                        <button class="btn btn-qlight">Q1</button>
+                        <button class="btn btn-qlight">Q2</button>
+                        <button class="btn btn-qlight">Q3</button>
+                        <button class="btn btn-qlight">Q4</button>
+                        <button class="btn btn-hlight">H1</button>
+                        <button class="btn btn-hlight">H2</button>
+                        <span class="fw-bold d-inline-block px-4">
+                        <input class="form-check-input mt-1 me-1" type="checkbox" value="" id="tilldate"> TILL PERIOD</span>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="input-group mb-3">
+                          <button class="input-group-text" id="basic-addon1"><span class="material-symbols-outlined">arrow_back_ios</span></button>
+                          <button type="button" class="input-group-text fw-bold" style="width: 270px; text-align: center; display: block;">FY: 2023 - 2024</button>
+                          <button class="input-group-text" id="basic-addon1"><span class="material-symbols-outlined">arrow_forward_ios</span></button>
+                        </div>
+                        
+                        <div class="row align-items-center my-2">
+                            <div class="col-md-2 fw-bold pe-0">From</div>
+                            <div class="col-md-10">
+                                <div class="calc-inputgroup">
+                                    <input type="text" value="<?php echo $from_date;?>" class="form-control" fdprocessedid="b20o4z" name="from_date" id="fromdate" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row align-items-center my-2">
+                            <div class="col-md-2 fw-bold pe-0">To</div>
+                            <div class="col-md-10">
+                                <div class="calc-inputgroup">
+                                    <input type="text" value="<?php echo $to_date;?>" class="form-control"  fdprocessedid="b20o4z" name="to_date" id="todate" required>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-end"><button class="input-group-text fw-bold ms-auto" id="tilldate" onClick="return setdate();">TILL DATE</button></p>
+                    </div> 
+     
+                    <p class="text-center pt-4">
+                        <button type="submit" class="btn btn-lg btn-success">GO</button>
+                        <button type="button" class="btn btn-lg btn-secondary" data-bs-dismiss="modal">Quit</button>
+                    </p>  
+                   
+                </div>
+                 </form>
+            </div> 
+        </div>
+    </div>
+</div>
+
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="moreoptions" aria-labelledby="moreoptionslabel">
+  <div class="offcanvas-header">
+    <h4 class="offcanvas-title" id="moreoptionslable">Apps</h4>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+      <div class="row">
+   
+       <div class="col-sm-6 border-end"> 
+       <h5 class="pb-3">Horizontal</h5>
+       
+      <p class="offcanvaoptions"><i>Condensed</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>Detailed</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>All Labels</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+       </div>
+       
+       <div class="col-sm-6"> 
+       <h5 class="pb-3">Verticle</h5>
+       
+      <p class="offcanvaoptions"><i>Verticle</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>Schudle</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+       </div>
+       
+        <div class="col-sm-12 pt-3 border-top"> 
+      <p class="offcanvaoptions"><i>Schedule</i>
+      <label class="form-check">No<input class="form-check-input mx-1" name="schedule" type="radio" value="no" id="swap"></label>
+      <label class="form-check">Yes<input class="form-check-input mx-1" name="schedule" type="radio" value="yes" id="swap"></label>
+      </p>
+      <p class="offcanvaoptions"><i>Ratio</i>
+      <label class="form-check">No<input class="form-check-input mx-1" name="ratio" type="radio" value="no" id="swap"></label>
+      <label class="form-check">Yes<input class="form-check-input mx-1" name="ratio" type="radio" value="yes" id="swap"></label>
+      </p>
+      
+      <p class="text-center pt-3"><a  data-bs-toggle="modal" data-bs-target="#moreoptionsmodal" class="btn btn-outline-success">View</a></p>
+        
+        </div>
+       
+          
+      </div>
+   
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade mt-5" id="moreoptionsmodal" tabindex="-1" aria-labelledby="moreoptionsmodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="moreoptionsmodalLabel">App Options title</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        ...
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+   <div id="grid_search" style="margin:auto;"> </div>  
+
+<?php echo view('includes/footer_scripts'); ?>
+<script>
+function setdate(){
+    $( "#todate" ).val('<?php echo date("d-m-Y");?>');
+     $( "#fromdate" ).val('<?php echo date("d-m-Y");?>');
+    return false;   
+   }
+$("#todate").datepicker({
+            showOn: 'button',
+            buttonImageOnly: true,
+            buttonImage: '<?php echo base_url();?>/public/assets/images/caldender-icon.png',
+            dateFormat: 'dd-mm-yy'
+        });    
+$("#fromdate").datepicker({
+            showOn: 'button',
+            buttonImageOnly: true,
+            buttonImage: '<?php echo base_url();?>/public/assets/images/caldender-icon.png',
+            dateFormat: 'dd-mm-yy'
+        });     
+</script>
+<script>
+
+ $(function () {
+     
+  function filterhandler(evt, ui) {
+
+            var $toolbar = $grid.find('.pq-toolbar-search'),
+                $value = $toolbar.find(".filterValue"),
+                value = $value.val(),
+                condition = $toolbar.find(".filterCondition").val(),
+                dataIndx = "",//$toolbar.find(".filterColumn").val(),
+                filterObject;
+
+            if (dataIndx == "") {//search through all fields when no field selected.
+                filterObject = [];
+                var CM = $grid.pqGrid("getColModel");
+                for (var i = 0, len = CM.length; i < len; i++) {
+                    var dataIndx = CM[i].dataIndx;
+                    filterObject.push({ dataIndx: dataIndx, condition: condition, value: value });
+                }
+            }
+            else {//search through selected field.
+                filterObject = [{ dataIndx: dataIndx, condition: condition, value: value}];
+            }
+            $grid.pqGrid("filter", {
+                oper: 'replace',
+                data: filterObject
+            });
+        }
+    var colModel = [
+            { title: "ACCOUNT NAME", align:"center", dataIndx: "account_name" },
+            { title: "BILLS RECEIVABLE", align:"center",    dataIndx: "bills_receivable" },
+            { title: "BILLS PAYABLE", align:"center",    dataIndx: "bills_payable" },
+            { title: "NET BILL AMT", align:"center",   dataIndx: "net_bill_amt" },
+            { title: "ON ACCOUNT", align:"center",   dataIndx: "on_account"},
+            { title: "NET BILLS O/S", align:"center",   dataIndx: "net_bill_os" },
+            { title: "LEDGER BAL", align:"center",   dataIndx: "ledger_bal" },
+	    ];
+	    	
+     var dataModel = {
+            location : "remote",
+            dataType : "json",
+            method   : "POST",
+            postData : {'from_date':'<?php echo $from_date;?>', 'to_date':'<?php echo $to_date;?>'},
+            url: "<?php echo base_url();?>/admin/reports/ajax_day_book",
+                getData: function (dataJSON) {
+                    var data = dataJSON.data;
+                    return { curPage: dataJSON.curPage, totalRecords: dataJSON.totalRecords, data: data };
+                }
+           };
+     var newObj = {
+            scrollModel: { autoFit: true },
+            height: 'flex',
+			resizable: true,
+           autoResize: true,
+            collapsible: { on: false, collapsed: false, toggle: false, css: { zIndex: 1000 } }, //disable maximize,toggle button.
+            selectionModel: { type: 'row',mode:'single' },
+            pageModel: { type: 'local' },
+            dataModel: dataModel,
+            pageModel: { type: "remote", rPP: 10, strRpp: "{0}" },
+            colModel : colModel,
+            editable: false,
+            numberCell: { show: false },
+            showTitle: true,
+            create: function (evt, ui) {// make first row auto selected
+                  var grid = this,
+                    $select_row = $(".select-row"),
+                    data = ui.dataModel.data;
+                   grid.setSelection({ rowIndx: 0, focus: true });
+            },
+            dataReady:function(event,ui) {
+                var grid = this;
+
+                const url = new URL(window.location.href);
+                if(url.searchParams.has('rowIndx')){
+                    var rowIndx = url.searchParams.get('rowIndx');
+                    url.searchParams.delete('rowIndx');
+                    window.history.replaceState(null, null, url);
+                    grid.setSelection({ rowIndx: parseInt(rowIndx), focus: true });
+                }
+                else{
+                    grid.setSelection({ rowIndx: grid.rowIndxOffset, focus: true });
+                }
+            },
+           toolbar: {
+                cls: "pq-toolbar-search",
+                items: [  
+                    { 
+                        type: 'textbox', 
+                        label: 'Filter: ',
+                        attr: 'placeholder="Enter your keyword"', 
+                        cls: "filterValue",
+                        listener: { keyup: filterhandler }
+                    },
+                    { 
+                        type: 'select',                         
+                        cls: "filterCondition",
+                        listener: filterhandler,
+                        options: [
+                            { "begin": "Begins With" },
+                            { "contain": "Contains" },
+                            { "end": "Ends With" },
+                            { "notcontain": "Does not contain" },
+                            { "equal": "Equal To" },
+                            { "notequal": "Not Equal To" },
+                            { "empty": "Empty" },
+                            { "notempty": "Not Empty" },
+                            { "less": "Less Than" },
+                            { "great": "Great Than" },
+                            { "regexp": "Regex" }
+                        ]
+                    }
+                ]
+            }
+        };
+        
+
+
+	     
+    var $grid = $("#grid_search").pqGrid(newObj);
+	 pq.grid("#grid_search", newObj)
+            .on("refresh refreshCell", function (evt, ui) {
+                if (ui.source != 'flex') {
+                    this.flex();
+                }
+            });
+      
+    function set_page()
+    {
+       var select_row = $("#grid_search").pqGrid("selection", { type:'row', method:'getSelection'});
+        if(select_row){
+            const url = new URL(window.location.href);
+            url.searchParams.set('rowIndx', select_row[0].rowIndx);
+            window.history.replaceState(null, null, url);
+        }
+        else{
+            const url = new URL(window.location.href);
+            if(url.searchParams.has('rowIndx')){
+                url.searchParams.delete('rowIndx');
+                window.history.replaceState(null, null, url);  
+            }
+        } 
+    }
+});
+  
+</script>
+<style>
+.hidden{display:none;}
+</style>
+ </body>
+</html>

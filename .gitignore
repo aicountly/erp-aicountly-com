@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+
+/writable/cache/*
+/writable/logs/*
+/writable/session/*
+/writable/debugbar/*
+/writable/uploads/*
+
+/node_modules/

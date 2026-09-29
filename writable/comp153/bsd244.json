@@ -1,0 +1,21 @@
+[
+    {
+        "label": "Round Off",
+        "value": "Round Off",
+        "id": "12183",
+        "account_id": "12183",
+        "acc_id": "12183",
+        "is_sundry": "1",
+        "is_acc": "0",
+        "is_bbb": 0,
+        "is_cc": 0,
+        "tx_ct_id": "714",
+        "bl_sply_tpe": "1",
+        "bl_hsn_sac": "",
+        "bl_tx_rte": 0,
+        "bl_ipt_ott": "0",
+        "bl_nature": "1",
+        "tax_cat_id": "714",
+        "is_tax_account": 0
+    }
+]

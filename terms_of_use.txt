@@ -1,0 +1,214 @@
+<div class="container content py-5">
+    
+<h3>Policy Terms &amp; Conditions</h3>
+<p>Disclaimer- The Terms of Service were last updated on 03rd July, 2023
+</p><ol>
+<li>You are requested to carefully read these terms of service. Since your last visit this website, the terms of service may have changed. You agree to be bound by the terms of service by subscribing or using our products offered under the Aicountly.
+</li>
+<li>For the advantage of our visitors, Aicountly offers this website. To address issues with content submission, commenting, and other Site policies, we prepared the Terms of Service.
+</li>
+<li>All products under the Aicountly as well as any Product that are later added are subject to the Terms of Service. Any mention of “Product” refers to the all products of Aicountly (Collectively referred as Aicountly Products or Aicountly Services).
+</li>
+<li>We reserve the right to change any of the terms, conditions or policies of the Product or Site, at any time in our sole discretion. If we decide to change the Terms of Service, we will publish a new version on the Site. Any such changes will be effective upon publishing the revisions. Your continued use of the Product or Site following the publishing of any changes constitutes your acceptance of such changes.
+</li>
+<li>You agree not to do any of the following:
+<ol type="i">
+<li>Collect any data about other users;
+</li>
+<li>(Make an unauthorized effort to access our computer system or the computer system of another user;
+</li>
+<li>Involve in any activity that obstructs, reduces the value of, obstructs the functioning of, or interferes with the operation of the Site and Products belongs to Aicountly.
+</li></ol></li>
+<li>We retain the right to cancel your permission to use the product or site in case of any misconduct on your part and to limit or otherwise restrict your access in the future, without prior notice and at our sole discretion. Additionally, we retain the right to fully cooperate with any law enforcement officials or court orders that ask or require us to reveal any information in order to comply with any relevant law, regulation, legal process, or governmental request.
+</li>
+</ol>
+
+
+
+<h5>Agreement</h5>
+<ol>
+<li>This agreement outlines the conditions governing the use of Aicountly Software Products/Services, which may be licenced on a monthly, quarterly or annual subscription basis and are offered and chosen by you or your agent through the Aicountly website. The terms "Products/ Services" refers to all Products, cloud, content, platform, forum, information, updates, and releases of Aicountly collectively.
+</li>
+<li>Kindly refer other additional conditions that are offered separately for the Aicountly products, such as those related to subscription, delivery, products, activation and/or payment, refund etc.
+</li>
+</ol>
+<h5>Usage Rights</h5>
+<ol>
+<li>Users are allowed permission to use the Aicountly Software Products and Services exclusively for the reasons specified by Aicountly, and the Products and site of Aicountly are protected by intellectual property laws in India. Users are given a personal, non-transferable, restricted access by Aicountly to use the software services. All other rights in the Aicountly and services are reserved by Aicountly.
+</li>
+<li>Users who sign up for the trial version ("Trial Period") of the Aicountly products must choose to subscribe to our products during the Trial Period itself in order to keep any content they enter through the Aicountly software services, create, post, and/or upload during that Trial Period. Their material will no longer be accessible to them if they do not subscribe to Aicountly Software Services by the end of the Trial Period.
+</li>
+<li>Users acknowledge and accept that Aicountly may share their access information and account data with
+<ol type="i">
+<li>their employee or agent who is listed in the registration data as the authorized user for their account (the "Authorized User");
+</li>
+<li>any other employee or agent who may be designated by them as a replacement authorized user for their account by following the procedures necessary in order to grant them access to and use of the Aicountly Products. The account data will be accessible to anybody else they recognised as a legitimate user of the Aicountly products, subject to the access rights granted to them by the Users.
+</li>
+<li>You understand and agree that you will not use or authorise any other person to use the products of Aicountly in a manner inconsistent with this Agreement, any relevant Regulations, and/or other Laws. You acknowledge that you would not:
+<ol type="a">
+<li>Allow or provide any access to use and/or give any part of the software services to any third party to use.</li>
+<li>Copy, modify, reproduce, and resell the Aicountly products/ services.</li>
+</ol>
+</li></ol></li>
+</ol>
+
+<h5>Genuine and Fair Usage</h5>
+<ol>
+<li>The Aicountly has been created for Professionals, Accountants, tax experts, business users and/or for individual users. The Aicountly limits the ability of any user to sell, lease, or rent the Aicountly products or opportunities to use for free under any MoU or offer, or to sell, lease, or rent additional user access to any other entity or individual. We want our users to have unrestricted access to the Aicountly Products. To ensure that our customers have the best experience possible, we have a fair use policy in place. Some users could have created too many businesses under one product licence, which might have a negative impact on the product’s bandwidth quality and hurt other users' experiences.
+</li>
+<li>Additionally, we aim to guarantee that each customer has the greatest possible experience within their selected budget or user plan. Thus, we constantly keep an eye on how each licence is being used and how many businesses are being established under it to ensure everything is operating as it should. If the limit is higher than the internal threshold limit and we have reason to think that the user is attempting to abuse the use rules, we block access and ask them to upgrade their plan. The internal threshold limit is a topic for internal discussion, and it may be altered without prior notice. A licence can only now have n number of businesses under it in accordance with the Aicountly Subscription subscribed by the user. All of our consumers receive service and support from us as SaaS (Software as a Service) -based solutions so they may maximize the business benefits.
+</li>
+<li>Software-related and data-related user assistance requests are typically the two main categories. In order to best serve our users, we permit unlimited access to software-related support. However, we currently
+</li>
+</ol>
+only permit up to newly created businesses to receive data-related support, which includes assistance with data entry and migration, return filing assistance with data analysis, and any type of data entry.
+<br><br>
+<h5>User's Financial Institution Services Data Accea. Allow or providess</h5>
+<ol>
+<li>Users may desire access to their online accounts and financial information, including their account access numbers, passwords, security questions and answers, account numbers, login information, and any other security or access information used to access their Financial data which may include bank balances, debits and credits/deposits in connection with using the Aicountly Software Services.
+</li>
+<li>The Aicountly Software Services are made to enable users to access and download their financial account data, to grant Aicountly access to their financial institution account using their financial login data, to download and use their financial account data, and to aggregate and combine their financial account data with other data. If users forget or lose their username or password, they will need to contact the relevant financial institution again if they experience any issues with that user name or password.
+</li>
+<li>Users acknowledge and accept that, aside from what is expressly stated in this Agreement, Aicountly has no control over their financial account data and financial login information, does not ensure that they will be able to use the Aicountly software service with their financial institutions, and will not be held responsible in any way for any actions or inactions on the part of the financial institutions that prevent them from using the Aicountly software service.
+</li>
+</ol>
+
+<h5>Data Transfer</h5>
+<ol>
+<li>In order to facilitate certain interoperability, data integration, and data access between the Aicountly Software Service and certain supported ancillary services (the "Ancillary Services") users may sign up for and use in conjunction with the Aicountly Software Service (the "Online Data Transfer"), users may choose to allow Aicountly to transfer their data files from the Aicountly Software Service.
+</li>
+<li>Users who want to choose the Online Data Transfer option must have registered latest version of Aicountly Software and an active Software Service subscription. Users grant Aicountly the right, if they choose the Online Data Transfer option, which will send a copy of all or a portion of their firm data files to servers over the Internet.
+</li>
+</ol>
+Aicountly Software Service Use, Storage and Access
+<ol>
+<li>Aicountly reserves the right to modify the Aicountly Software Service and establish or change usage restrictions, either temporarily or permanently, in its sole discretion and with reasonable notice posted on the Aicountly website and/or sent to you at the current registered email address provided in the Registration Data, including but not limited to the amount of storage users have at any given time on the Aicountly software service, and; the amount of storage users have at any given time on the Aicountly software service.
+</li>
+<li> How many times (and for how long a time) a user is permitted to access the Aicountly software service in a certain period of time. In order to maintain the security of the system or User Access Information, or to comply with any laws or regulations, Aicountly maintains the right to make any such changes effective right away. Users will be notified via electronic or writing means within thirty (30) days of the change. Users can reject changes by not using the Aicountly Software Service that they relate to anymore. By using the Aicountly software service in the future, users will be deemed to have accepted and agreed to these modifications. When Aicountly does maintenance on its software services, it may occasionally cause service interruptions, delays, or mistakes. Although Aicountly will make every effort to notify users in advance of scheduled maintenance but it cannot promise that such notices will be provided.
+</li>
+</ol>
+<h5>Use of the Software Services on Mobile Devices</h5>
+<ol>
+<li> On mobile devices, our software services might be usable and they might also need extra software and internet access. You acknowledge and accept that you alone will be accountable for these demands and the conditions of such service providers.
+</li>
+<li> Aicountly makes no representations, warranties, or guarantees, whether stated or implied, regarding any accessibility to, and availability of, telecommunications resources and services from any such service provider, from any location, at any time; any breach of security, harm to or loss of telecommunications services, and; Whether or not to transmit and convey any information, data, or settings relevant to and connected with the services, including any information disclosure to any third parties.
+</li>
+</ol>
+<br><br>
+<h5>User’s Content</h5>
+
+Users are legally liable for all data, information, text, graphics, software, and/or other materials ("Content") used through their usage of the software services. This includes, but is not limited to, any such data, information, text, graphics, software, and/or other materials. Users grant Aicountly a free and non-exclusive right to host and use the content in order to deliver software services to them. Users are urged to frequently archive and backup your content. Users are personally liable for any lost or irrecoverably deleted content resulting from their usage of the software services. Users acknowledge and agree that they will not use the software services to use any data or information that does not comply with Indian legislation. Users who are suspected of possessing information that relates to any illegal activity may have their software services terminated, their data erased, and may even be reported to Indian law enforcement officials. Any content you post on the Aicountly website is not the responsibility of Aicountly.
+<br><br>
+Users accept and agree not to publish, upload, link to, re-produce, transmit, and/or engage in any of the following using the Aicountly software services, including but not limited to:
+<ol>
+<li>Information and/or communication that violates any Indian or foreign law, is inappropriate, offensive, or both;
+</li>
+<li>Anything that might give the impression of someone else, falsely represent an identity or a set of qualities, or otherwise violate the privacy of an individual;
+</li>
+<li>Unless as otherwise permitted by Aicountly, in any article, advertisement, solicitation, business opportunity, thread letter, scheme, or other unsolicited business communication;
+</li>
+<li>Any virus, as well as any other disruptive or dangerous software, data, or information;
+</li>
+<li>Any content that is not legally yours or theirs and that could be covered by intellectual property rights cannot be used without the owners or holders of those rights' consent.
+</li>
+</ol>
+
+Forums for experts and users on the Aicountly website. The software services might have a community and expert forum, as well as other social elements, where users can share opinions, data, and material with each other and with non-users of the software services. When communicating with other users, users should exercise caution and refrain from posting any data or information that they do not wish to be made publicly available. Users may post hypertext links to third-party information, but Aicountly will not be held liable in any way for doing so.
+<br><br>
+Aicountly will be free to use customer feedback on software services. Users accept and concur that Aicountly is free to use such recommendations, comments, and requests in any way, including by changing the software services, advertising strategies, and/or other services. Users grant Aicountly a free worldwide non-exclusive right to use the feedback they provide to Aicountly in any manner.
+<br><br>
+Aicountly has the right, but not the obligation, to monitor content on the software services posted by users. To safeguard Aicountly or its software service users and/or to efficiently operate the software services, Aicountly may disclose any information to law enforcement agencies as required by any legal obligation. Aicountly reserves the right to post, refuse to post, remove, or refuse to remove any content that is inappropriate or that violates the provisions of this agreement in whole or in part.
+<br><br>
+Aicountly might offer interactions on social networking sites like Facebook®, Twitter®, and LinkedIn® that let users who have signed up to utilize them share and collaborate online. other content that users post on these social networks, including photographs, articles, opinions, or other Personal Information that users disclose to other users, is subject to the Terms of Use and Privacy Policies of those platforms. To better understand your rights and obligations with relation to such content, please go to those social media networks.
+<br><br>
+<h5>Third Party Services/Products</h5>
+<ol>
+<li>Users may hear from Aicountly about the goods or services of third parties, including through the Service. Aicountly may provide access to or links to third-party websites ("Third Party Sites") as well as products and services on behalf of third parties that are not associated with Aicountly ("Third Party Products"). Users are completely responsible for their choice, review of any specific product terms, website terms, and privacy policies if they choose to use any Third-Party Products or access any Third-Party Sites.
+</li>
+<li>Even if these Third-Party Products are advertised or distributed through our products, website, or in any other way connected to Aicountly in any way, Aicountly is not linked with these Third-Party Products or Third-Party Sites and does not promote or recommend Third Party Products. Users acknowledge that the functioning of third-party products, including technical support, the information on their websites, and the use or publication of user data are exclusively the responsibility of the third parties and not Aicountly. Aicountly disclaims all responsibility for any losses, liabilities, or claims caused by third parties, third-party products, or third-party websites.
+</li>
+<li>Users acknowledge their agreement to abide by all relevant laws, rules, and regulations; not act in a way that would violate or infringe on Aicountly’s or another party's rights when using Third Party Products; You must not use the third-party products in any way that supports illegal, fraudulent, or criminal behavior.
+</li>
+</ol>
+
+<br><br>
+<h5>Beta Features</h5>
+<ol>
+<li>Aicountly may sometimes and at its sole discretion add new and/or updated beta features ("Beta Features") in its products for usage and that allow users to submit feedback (fees may or may not apply). The usage of the Beta Features is optional, and Users expressly acknowledge and agree that Aicountly has no responsibility to continue offering them any Beta Features in the future.
+</li>
+<li>Users acknowledge that they might not be able to go back to the prior, non-beta version of the programme once they have used the Beta Features. Additionally, even if such a reversion is possible, you might not be able to restore data produced using the Beta Feature to the earlier non-beta version. The Beta Features are offered "as is" and might include mistakes or inaccuracies that lead to data loss, information corruption, or other issues on any associated device. The usage of the Beta Features is accepted by Users as being done at their own risk.
+</li>
+<li>Give any third party the option to utilise, have access to, or receive any portion of the software services. You may replicate, alter, copy, and sell the software services.
+</li>
+<li>Software-related and data-related user assistance requests are typically the two main categories. In order to best serve our users, we permit unlimited access to software-related support. However, we currently only permit up to 10 newly created businesses to receive data-related support, which includes assistance with data entry and migration, return filing assistance with data analysis, and any type of data entry.
+</li>
+</ol>
+<br><br>
+<h5>Add-on Terms</h5>
+
+Under the terms of this agreement, Aicountly does not provide any professional advice. Aicountly does not offer any professional services or advice unless expressly stated in the other professional services agreement. Aicountly advised consumers to first speak with us whenever they need professional advice or assistance. Users may be given access to other services through Aicountly, but there may be additional costs and restrictions.
+<br><br>
+<h5>Communications</h5>
+
+Users acknowledge and accept that under any legislation, any other service, and/or third-party products/services, Aicountly may send them communications via email or by publishing them on websites.
+<br><br>
+<h5>Passwords</h5>
+
+Users will periodically accept application updates and manage their passwords. Users are in charge of securely managing their passwords for the software services and are required to get in touch with Aicountly in any instance. Users agree to periodically receive updates for the software services, which may be updated in any way to improve the software services.
+<br><br>
+Use of Aicountly software services and its contents is entirely at your own risk. Except as described in this agreement, the software services are provided “as is.” to the maximum extent permitted by applicable law. Aicountly disclaims all express or implied warranties. Aicountly does not warrant that the services are free from bugs, interruption, errors and secure.
+<br><br>
+Aicountly makes no assurances or representations regarding the likelihood that using its software will result in adherence to all applicable rules, laws, and/or legal duties. Aicountly does not intend to exclude or limit liability that cannot be lawfully excluded by the parties' contractual agreement, and no provision of this agreement shall exclude or limit liability to the extent that such exclusion or limitation is prohibited by the applicable laws of India.
+<br><br>
+<h5>Liability and indemnity</h5>
+To the fullest extent permitted by relevant law, Aicountly’s total liability for all claims pertaining to this agreement shall be limited to the subscription fees users paid for the services during the twelve (12) months before such claim. Aicountly is never responsible for any of the following, subject to applicable law:
+<ol>
+<li>Any direct, indirect, punitive, consequential, extraordinary, or exemplary damages;</li>
+<li>Damages due to failure of any telecommunications means, internet, corruption, security, theft and/or loss of data, any virus, bugs, spyware, any loss, revenue or use of any hardware/software that does not meet Aicountly systems requirement. Further, this agreement sets forth the entire liability of Aicountly and its users’ exclusive remedy with respect to the Aicountly services and its use.</li>
+<li> Users accept and agree to hold Aicountly and its officers harmless from any and all claims, expenses, and other liabilities, including reasonable legal fees and costs, resulting from users’ use of the software services or any other breach of this Agreement (collectively referred to as "Claims") (or any other breach of this Agreement).</li>
+</ol>
+<h5>Alterations</h5>
+Aicountly maintains the right to modify or alter the terms of this Agreement at any time. All modifications or changes shall take effect as soon as they are posted via the services, on the Aicountly website for the software services, or when Aicountly notifies you via any other communication channel. Additionally, Aicountly reserves the right to modify or end the software services whole or in part. By using the Aicountly software services in the future, the user confirms their acceptance of the modifications and changes.
+<br><br>
+<h5>Termination</h5>
+A free trial account with Aicountly may be cancelled at any moment. Furthermore, if users violate any of the provisions of this agreement or cease to accept or agree to receive communications, Aicountly may, in its sole discretion, immediately terminate this Agreement or discontinue the software services without prior warning. Users must promptly stop utilizing the software services after termination. Aicountly’s rights to pursue and collect any payments owed to it are unaffected by the termination of this Agreement. If users are registered for a trial version of Aicountly software services, they must decide to subscribe a license of the Aicountly Software Services, at the current rate, within the Trial Period itself in order to retain any content that they have entered through the Aicountly Software Services, created, posted and/or uploaded during such Trial Period. If they do not subscribe for a license of the Aicountly Software Services by the end of the Trial Period, their content will no longer be available to them.
+<br><br>
+Users will only be able to access the Aicountly Software Service till the end of the subscription term after cancelling their subscription. Users will not have any access to the Aicountly Software Service after the subscription term has ended. Please use Aicountly website to seek account cancellation. When the Aicountly Software Services are cancelled or terminated, there are no reimbursements given.
+<br><br>
+<h5>Governance</h5>
+
+Any dispute relating to this Agreement or its breach, whether it arises while this Agreement is in effect or afterward, shall be submitted exclusively to binding arbitration under the (Indian) Arbitration and Conciliation Act, 1996, by an arbitrator chosen in accordance with such Act and agreed upon by the parties. This Agreement shall be governed by, subject to, and interpreted in accordance with Indian Laws. The arbitration hearing must take place in Chandigarh, India, and all communications between the parties and during the hearing must be in English. Notices between the parties must be sent via certified or registered mail with return receipt requested. They must be postmarked no later than twelve (12) days after being deposited in the mail to be considered given. The Aicountly Legal Department must receive the notice if it is addressed to Aicountly.
+<br><br>
+<h5>Conclusion</h5>
+
+Users and Aicountly have agreed to everything in this Agreement, including all the Terms, and it supersedes any prior discussions, understandings, and agreements on the subject. If any section or portion of this Agreement is determined to be unlawful by any court with jurisdiction, that section or portion shall be severed without affecting the validity or enforceability of the other provisions.
+<br><br>
+Users cannot assign or transfer ownership of this Agreement to anyone without written consent of Aicountly. However, Aicountly may assign or transfer it without users consent to (a) any affiliate, (b) a company through a sale of assets or (c) a successor by merger or other means. Further, any assignment in violation of this Section shall be void. Any assignment that is made in contravention of this Section is also void.
+
+
+
+
+
+<br><br>
+<h5>Grievance</h5>
+<p>If you have any questions, please e-mail at grievance@sispl.org</p>
+<p>Any queries or concerns relating to the Fees and Payment may be directed by you to our customer support team who can be contacted at: </p>
+<table class="table">
+		<tbody>
+			<tr>
+				<td>Name:</td>
+				<td>Shraddha Dwivedi</td>
+			</tr>
+			<tr>
+				<td>
+				Email:</td>
+				<td>
+				<a href="mailto:shraddha@sispl.org">shraddha@sispl.org</a>	</td>
+			</tr>
+			<tr>
+				<td>Address:</td>
+				<td>3069-B, Third Floor, Ajanta Enclaves, Sector 51-D, Chandigarh – 160047</td>
+			</tr>
+		</tbody>
+	</table>
+</div>

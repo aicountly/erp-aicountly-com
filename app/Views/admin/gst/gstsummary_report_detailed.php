@@ -1,0 +1,572 @@
+<?php $header = array( 	'title' => 'GSTR Summary Detailed Report' ); ?>
+<?php echo view('includes/header',$header); ?>
+<style>
+ .myform .col-12{padding:6px 0px;}
+ .myform label{width:25%; float:left;}
+ .myform .form-control, .myform select {width:75%;}
+</style>
+<style>
+/*for autocomplete */
+.ui-autocomplete {
+    z-index:9999!important;
+}
+.pq-sb-horiz-t .pq-sb-slider, .pq-sb-vert-t .pq-sb-slider, .pq-sb-horiz-t .pq-sb-btn, .pq-sb-vert-t .pq-sb-btn{background-color: rgb(220, 254, 211) !important;}
+</style>
+<div class="row mb-md-0 mb-3">
+    <div class="col-md-6"><h3 class="pb-3">GSTR Summary Detailed Report</h3></div>
+    <div class="col-md-6 text-end"><div class="taskmenus">
+        <a href="javascript:void(0)" id="refresh_grid"><span class="material-symbols-outlined">refresh</span></a>
+        <a data-bs-toggle="offcanvas" href="#moreoptions" role="button" aria-controls="moreoptions"><span class="material-symbols-outlined">offline_bolt</span></a> 
+        <a href="#"><span class="material-symbols-outlined open-comingsoon">print</span></a>
+        <a href="#" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined"><span class="material-symbols-outlined">download</span></span></a>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="javascript:void(0)" onclick="print_csv();">CSV</a></li>
+			<li><a class="dropdown-item" href="javascript:void(0)" onclick="print_excel();">Excel</a></li>
+			<li><a class="dropdown-item" href="javascript:void(0)" onclick="print_pdf();">Document</a></li>
+          </ul>
+        <a href="#" data-bs-toggle="dropdown" aria-expanded="false"><span class="material-symbols-outlined">share</span></a> 
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#">Facebook</a></li>
+            <li><a class="dropdown-item" href="#">Twitter</a></li>
+            <li><a class="dropdown-item" href="#">Instagram</a></li>
+        </ul>
+       
+    </div>
+    </div>
+</div>
+<div class="row mb-2 align-items-top">
+    <div class="col-lg-5">
+        <form class="form needs-validation" method="get" id="salefrm" autocomplete="off" novalidate>
+        <div class="form-check form-check-inline me-2">
+            <input  class="form-check-input" type="checkbox" value="1" name="fg" id="fg">
+            <label class="form-check-label" for="fg">Fixed Grid</label>
+        </div> 
+		<input type="hidden" name="fromdate" value="<?php echo date('Y-m-d',strtotime($from_date));?>">
+		<input type="hidden" name="todate" value="<?php echo date('Y-m-d',strtotime($to_date));?>">
+        <input type="hidden" name="fltrtype" value="<?php echo $fltrtype;?>">
+		</form>
+    </div>
+    <div class="col-lg-7 text-end">
+		<div class="dropdown d-inline-block me-1" style="width:220px;">
+		  <div class="input-group input-group-sm input-group">
+              <span class="input-group-text">View</span>
+              <select form="salefrm" class="form-select" name="summary_view" onchange="this.form.submit()">
+                   <option value=""></option>
+				  <option <?= ($summary_view==0) ? 'selected' : '' ?> value="0">Tax Summary</option>
+                  <option <?= ($summary_view==1) ? 'selected' : '' ?> value="1">HSN Summary</option>				 
+              </select>
+              
+          </div>
+         
+        </div>	
+        <div class="dropdown d-inline-block me-1" style="width:220px;">		
+          <div class="input-group input-group-sm input-group">
+              <span class="input-group-text">View</span>
+              <select form="salefrm" class="form-select" name="view" onchange="this.form.submit()">
+                   <option value=""></option>
+				  <option <?= ($view==0) ? 'selected' : '' ?> value="0">Condensed</option>
+                  <option <?= ($view==1) ? 'selected' : '' ?> value="1">Detailed</option>				 
+              </select>              
+          </div>  
+        </div>
+		 
+        <div class="dropdown float-end">
+            
+            <button class="btn btn-success btn-sm dropdown-toggle mt-0 m-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"> Voucher Series </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#">Action</a></li>
+                <li><a class="dropdown-item" href="#">Another action</a></li>
+                <li><a class="dropdown-item" href="#">Something else here</a></li>
+            </ul>
+             <a href="<?php echo history_back();?>"  class="btn btn-sm btn-outline-success mt-0 m-1">Back</a>
+        </div>
+    </div>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="moreoptions" aria-labelledby="moreoptionslabel">
+  <div class="offcanvas-header">
+    <h4 class="offcanvas-title" id="moreoptionslable">Apps</h4>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+      <div class="row">
+   
+       <div class="col-sm-6 border-end"> 
+       <h5 class="pb-3">Horizontal</h5>
+       
+      <p class="offcanvaoptions"><i>Condensed</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>Detailed</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>All Labels</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+       </div>
+       
+       <div class="col-sm-6"> 
+       <h5 class="pb-3">Verticle</h5>
+       
+      <p class="offcanvaoptions"><i>Verticle</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+      
+      <p class="offcanvaoptions"><i>Schudle</i>
+      <label class="starcheck"><input type="checkbox" checked="checked"><b class="checkmark">★</b></label>
+      <label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="swap"></label>
+      <label class="form-check"><input class="form-check-input" type="checkbox" value="" id="swap"></label>
+      </p>
+       </div>
+       
+        <div class="col-sm-12 pt-3 border-top"> 
+      <p class="offcanvaoptions"><i>Schedule</i>
+      <label class="form-check">No<input class="form-check-input mx-1" name="schedule" type="radio" value="no" id="swap"></label>
+      <label class="form-check">Yes<input class="form-check-input mx-1" name="schedule" type="radio" value="yes" id="swap"></label>
+      </p>
+      <p class="offcanvaoptions"><i>Ratio</i>
+      <label class="form-check">No<input class="form-check-input mx-1" name="ratio" type="radio" value="no" id="swap"></label>
+      <label class="form-check">Yes<input class="form-check-input mx-1" name="ratio" type="radio" value="yes" id="swap"></label>
+      </p>
+      
+      <p class="text-center pt-3"><a  data-bs-toggle="modal" data-bs-target="#moreoptionsmodal" class="btn btn-outline-success">View</a></p>
+        
+        </div>
+       
+          
+      </div>
+   
+  </div>
+</div>
+
+
+<div class="row">
+    <div class="col-md-6">
+	<?php
+	 $fltrtype_info = unobfuscate_link($fltrtype);
+	 if($fltrtype_info[1]=='mnth'){
+		 $filter_labels = date('M, Y',strtotime($from_date));
+	 }
+	else if($fltrtype_info[1]=='qtr'){
+		 $filter_labels = date('M, Y',strtotime($from_date)) .' To '.date('M, Y',strtotime($to_date));
+	 }
+	else if($fltrtype_info[1]=='yrs'){
+		 $filter_labels = date('M, Y',strtotime($from_date)) .' To '.date('M, Y',strtotime($to_date));
+	 }
+  else if($from_date==$to_date)
+	  $filter_labels = date('M, Y',strtotime($from_date));
+   else
+	   $filter_labels = date('M, Y',strtotime($from_date)) .' To '.date('M, Y',strtotime($to_date)); 
+	?>
+        <p><em>For: <strong><?php echo $filter_labels;?></strong></em></p>
+    </div>
+     
+</div>
+
+<div id="validation_errors"></div>
+<br>
+<div id="grid_search" style="margin:auto;"> </div> 
+<div class="col-12 text-center">
+         <br><br>
+        <a href="<?php echo base_url();?>/admin/etaxes/report_summary?fromdate=<?php echo $from_date;?>&todate=<?php echo $to_date;?>&fltrtype=<?php echo $fltrtype;?>"  class="btn btn-success btn-lg">PREVIEW GSTR-1</a>
+        
+    </div>
+
+<?php echo view('includes/footer_scripts'); ?>
+<script>
+var pageview ='<?php echo $view;?>';
+var summary_view_page = '<?php echo $summary_view;?>';
+$(function () {
+       function calculateSummary() { 
+          		
+        // calculate summary from page wise data  
+        var invoiceTotalOut = 0,
+            taxableTotalOut = 0,
+            igstTotalOut = 0,
+            cgstTotalOut = 0,
+            sgstTotalOut = 0,
+            cessTotalOut = 0,
+            taxTotalOut = 0,
+			
+			invoiceTotalIn = 0,
+            taxableTotalIn = 0,
+            igstTotalIn = 0,
+            cgstTotalIn = 0,
+            sgstTotalIn = 0,
+            cessTotalIn = 0,
+            taxTotalIn = 0,
+           data = $("#grid_search").pqGrid( "pageData" ),
+			len = data.length;
+		
+			console.log(data);
+        data.forEach(function(row){   
+          if(row.table_key=='total_otax'){		
+             invoiceTotalOut +=  parseAmount(row.sm_invoice_value);
+             taxableTotalOut +=  parseAmount(row.sm_taxable_value);
+             igstTotalOut +=  parseAmount(row.sm_igst);
+             cgstTotalOut +=  parseAmount(row.sm_cgst);
+             sgstTotalOut +=  parseAmount(row.sm_sgst);
+             cessTotalOut +=  parseAmount(row.sm_cess);
+             taxTotalOut +=  parseAmount(row.sm_total_tax);
+		  }
+		  if(row.table_key=='total_itax'){		
+             invoiceTotalIn +=  parseAmount(row.sm_invoice_value);
+             taxableTotalIn +=  parseAmount(row.sm_taxable_value);
+             igstTotalIn +=  parseAmount(row.sm_igst);
+             cgstTotalIn +=  parseAmount(row.sm_cgst);
+             sgstTotalIn +=  parseAmount(row.sm_sgst);
+             cessTotalIn +=  parseAmount(row.sm_cess);
+             taxTotalIn +=  parseAmount(row.sm_total_tax);
+		  }
+
+        })
+
+     if(summary_view_page=='0'){
+        var totalData = {
+                table_name :"NET GST",
+                invoice_value:formatAmount(invoiceTotalOut-invoiceTotalIn),
+				taxable_value:formatAmount(taxableTotalOut-taxableTotalIn),
+				igst :formatAmount(igstTotalOut-igstTotalIn),
+                cgst:formatAmount(cgstTotalOut-cgstTotalIn),
+				sgst:formatAmount(sgstTotalOut-sgstTotalIn),
+				cess:formatAmount(cessTotalOut-cessTotalIn),
+                total_tax: formatAmount(taxTotalOut-taxTotalIn),
+                pq_rowcls: 'grid_footer_color',
+                summaryRow: true
+            }       
+        this.option('summaryData', [totalData]);
+      }
+		
+    }
+    
+        function filterhandler(evt, ui) {
+
+            var $toolbar = $grid.find('.pq-toolbar-search'),
+                $value = $toolbar.find(".filterValue"),
+                value = $value.val(),
+                condition = '',//$toolbar.find(".filterCondition").val(),
+                dataIndx = '',//$toolbar.find(".filterColumn").val(),
+                filterObject;
+
+            if (dataIndx == "") {//search through all fields when no field selected.
+                filterObject = [];
+                var CM = $grid.pqGrid("getColModel");
+                for (var i = 0, len = CM.length; i < len; i++) {
+                    var dataIndx = CM[i].dataIndx;
+                    filterObject.push({ dataIndx: dataIndx, condition: condition, value: value });
+                }
+            }
+            else {//search through selected field.
+                filterObject = [{ dataIndx: dataIndx, condition: condition, value: value}];
+            }
+            $grid.pqGrid("filter", {
+                oper: 'replace',
+                data: filterObject
+            });
+        }
+        //filterRender to highlight matching cell text.
+        function filterRender(ui) {
+            var val = ui.cellData,
+                filter = ui.column.filter;
+            if (filter && filter.on && filter.value) {
+                var condition = filter.condition,
+                    valUpper = val.toUpperCase(),
+                    txt = filter.value,
+                    txt = (txt == null) ? "" : txt.toString(),
+                    txtUpper = txt.toUpperCase(),
+                    indx = -1;
+                if (condition == "end") {
+                    indx = valUpper.lastIndexOf(txtUpper);
+                    //if not at the end
+                    if (indx + txtUpper.length != valUpper.length) {
+                        indx = -1;
+                    }
+                }
+                else if (condition == "contain") {
+                    indx = valUpper.indexOf(txtUpper);
+                }
+                else if (condition == "begin") {
+                    indx = valUpper.indexOf(txtUpper);
+                    //if not at the beginning.
+                    if (indx > 0) {
+                        indx = -1;
+                    }
+                }
+                if (indx >= 0) {
+                    var txt1 = val.substring(0, indx);
+                    var txt2 = val.substring(indx, indx + txt.length);
+                    var txt3 = val.substring(indx + txt.length);
+                    return txt1 + "<span style='background:yellow;color:#333;'>" + txt2 + "</span>" + txt3;
+                }
+                else {
+                    return val;
+                }
+            }
+            else {
+                return val;
+            }
+        }
+       var colModel = [
+            { title: "PARTICULARS", width: 250, dataIndx: "table_name",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;					 
+				 if(rd.table_name == '')
+					 return ""; 
+				 } 			},
+            { title: "INVOICE VALUE", width: 100, align:"right",dataIndx: "invoice_value",sortable:false,
+			 render: function( ui ) {
+				 var rd = ui.rowData;				 
+				 if(rd.table_name == '')
+					 return ""; 
+				  else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.invoice_value+"</em></strong>";
+				   }
+				  else
+					return "<em>"+rd.invoice_value+"</em>";  
+			    }				 
+			},
+            { title: "TAXABLE VALUE", width: 100, align:"right",dataIndx: "taxable_value",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;
+				 if(rd.table_name == '')
+					 return ""; 
+				else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.taxable_value+"</em></strong>";
+				   }
+				   else
+					return "<em>"+rd.taxable_value+"</em>";   
+				 
+				 }	 },  
+            { title: "IGST", width: 100, align: "right", dataIndx: "igst",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;				 
+				 if(rd.table_name == '')
+					 return ""; 
+				 else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.igst+"</em></strong>";
+				   }
+				  else
+					return "<em>"+rd.igst+"</em>";  
+				 }	 
+			},
+            { title: "CGST", width: 100, align: "right", dataIndx: "cgst",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;				
+				 if(rd.table_name == '')
+					 return "";
+				 else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.cgst+"</em></strong>";
+				   }
+				   else
+					return "<em>"+rd.cgst+"</em>"; 
+				 }	 
+			},
+			{ title: "SGST", width: 100, align: "right", dataIndx: "sgst",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;				
+				 if(rd.table_name == '')
+					 return ""; 
+				 else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.sgst+"</em></strong>";
+				   }
+				  else
+					return "<em>"+rd.sgst+"</em>"; 
+				 }	 
+			},
+			{ title: "CESS", width: 100, align: "right", dataIndx: "cess",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;				
+				 if(rd.table_name == '')
+					 return "";
+				 else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.cess+"</em></strong>";
+				   }
+				 else
+					return "<em>"+rd.cess+"</em>";  
+				 }	 
+			},
+            { title: "TOTAL TAX", width: 100, dataType: "string", align:"right",dataIndx: "total_tax",sortable:false,
+			render: function( ui ) {
+				 var rd = ui.rowData;				
+				 if(rd.table_name == '')
+					 return ""; 
+				 else if((rd.table_key=="total_otax" || rd.table_key=="total_itax" || rd.table_key=="total_outward_supply_hsn" || rd.table_key=="total_inward_supply_hsn")){
+					 return "<strong><em>"+rd.total_tax+"</em></strong>";
+				   }
+				  else
+					return "<em>"+rd.total_tax+"</em>"; 
+				 }	 
+			},		   
+	 	    ];
+      
+         var loadStateSuccess;
+		 var minWidth='flex'; 
+		 var scrollModel={ autoFit: true };
+		
+        var newObj = {
+            scrollModel: scrollModel,
+            collapsible: { on: false, collapsed: false, toggle: false, css: { zIndex: 1000 } }, //disable maximize,toggle button.
+            height: "flex",
+			minWidth: minWidth,
+			selectionModel: { type: 'row',mode:'single' },
+            dataModel: <?php echo $response;?>,
+            dataReady: calculateSummary,
+			colModel: colModel,  
+			wrap:false,
+            numberCell: { show: false },
+            filterModel: { mode: 'OR', type: "local" },
+            pageModel: { type: "local", rPP: 100, strRpp: "{0}" },
+            editable: false,
+            showTitle: false,
+            create: function (evt, ui) {// make first row auto selected
+			var grid = this,
+                $select_row = $(".select-row"),
+                data = ui.dataModel.data;
+				var rowIndx =0;
+             loadStateSuccess = this.loadState({ refresh: false });
+			 const url = new URL(window.location.href);
+                if(url.searchParams.has('rowIndx')){
+                    var rowIndx = url.searchParams.get('rowIndx');
+                    url.searchParams.delete('rowIndx');
+                    window.history.replaceState(null, null, url);
+                    grid.setSelection({ rowIndx: parseInt(rowIndx), focus: true });
+                }
+                else{
+                    grid.setSelection({ rowIndx: grid.rowIndxOffset, focus: true });
+                } 
+             
+            },	
+			
+            toolbar: {
+                cls: "pq-toolbar-search",
+                items: [  
+                    { 
+                        type: 'textbox', 
+                        label: 'Filter: ',
+                        attr: 'placeholder="Enter your keyword"', 
+                        cls: "filterValue",
+                        listener: { keyup: filterhandler }
+                    },                    
+                ]
+            }
+        };
+        
+        newObj.rowDblClick = function(event, ui) {
+             
+  	            var rowData    = ui.rowData;
+				var txn_bo_id = rowData.bo_id;
+  	            var col_type = rowData.col_type;
+  	            var ajax   = rowData.ajax;
+		        var from_date   = rowData.from_date;
+		        var to_date   = rowData.to_date;
+				var voucher_type_id   = rowData.vch_type_id;
+				 var htableno   = rowData.table_key;
+				 var invoice_value   = rowData.invoice_value;
+			
+				var select_rowindx =  set_page();
+			if(	htableno!=''){
+				
+				if(summary_view_page==1 && invoice_value!='')
+				 window.location.href= baseurl+"admin/gst/hsn_summary_ledger?fromdate="+from_date+"&todate="+to_date+"&tableno="+htableno+"&rowIndx="+select_rowindx;
+					
+			  else
+               window.location.href= baseurl+"admin/gst/ledger?fromdate="+from_date+"&todate="+to_date+"&tableno="+htableno;
+			}
+                console.log(rowData);
+                 $("#grid_search").pqGrid('saveState');
+				
+	     }
+	     
+	    newObj.cellKeyDown= function(evt, ui) {
+	        
+	           var rowData    = ui.rowData;
+				var txn_bo_id = rowData.bo_id;
+  	            var col_type = rowData.col_type;
+  	            var ajax   = rowData.ajax;
+		        var htableno   = rowData.table_key;
+		        var from_date   = rowData.from_date;
+		        var to_date   = rowData.to_date;
+				var invoice_value   = rowData.invoice_value;
+				var voucher_type_id   = rowData.vch_type_id;
+		       if (evt.keyCode==13){
+				var select_rowindx =  set_page();
+                if(	htableno!=''){
+				
+				if(summary_view_page==1 &&  invoice_value!='')
+				window.location.href= baseurl+"admin/gst/hsn_summary_ledger?fromdate="+from_date+"&todate="+to_date+"&tableno="+htableno+"&rowIndx="+select_rowindx;
+				
+			  else
+				  window.location.href= baseurl+"admin/gst/ledger?fromdate="+from_date+"&todate="+to_date+"&tableno="+htableno;
+			   }
+                 $("#grid_search").pqGrid('saveState');
+				
+		         
+		       }
+		   
+	       }
+        
+    var $grid = $("#grid_search").pqGrid(newObj);
+
+     $("#grid_search").pqGrid('loadState'); 
+         $(window).unload( function(){
+          
+         $("#grid_search").pqGrid('saveState');
+       });
+    function set_page()
+    {
+       var select_row = $("#grid_search").pqGrid("selection", { type:'row', method:'getSelection'});
+        if(select_row){
+            const url = new URL(window.location.href);
+            url.searchParams.set('rowIndx', select_row[0].rowIndx);
+            window.history.replaceState(null, null, url);
+			return select_row[0].rowIndx;
+        }
+        else{
+            const url = new URL(window.location.href);
+            if(url.searchParams.has('rowIndx')){
+                url.searchParams.delete('rowIndx');
+                window.history.replaceState(null, null, url); 
+					
+            }
+			return 0;
+        } 
+    }
+     
+    });
+    
+  $(document).on('change', '#fg', function(){
+    if($(this).is(":checked")) {
+      $("#grid_search").pqGrid('option', 'height', 420);
+    }
+    else{
+      $("#grid_search").pqGrid('option', 'height', 'flex');
+    }
+    $("#grid_search").pqGrid('refreshDataAndView');
+  });
+function print_excel(){
+			var from_date = '<?php echo $from_date;?>'; 
+			var to_date   = '<?php echo $to_date;?>';
+            var view      = '<?php echo $view;?>'; 
+			var summary_view      = '<?php echo $summary_view;?>'; 
+			
+            if(view == 0){
+                var stringparameters = "view="+view+"&summary_view="+summary_view+"&from_date="+from_date+"&to_date="+to_date;
+                window.location.href= baseurl+"admin/export/gstrsummary_report_detail?"+stringparameters;
+            }
+			if(view == 1){
+                var stringparameters = "view="+view+"&summary_view="+summary_view+"&from_date="+from_date+"&to_date="+to_date;
+                window.location.href= baseurl+"admin/export/gstrsummary_report_detail?"+stringparameters;
+            }
+        }
+
+</script>	<style>.hidden{display:none;}</style></body></html>
