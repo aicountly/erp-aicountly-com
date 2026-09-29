@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SANDBOX-ONLY: full regression. Needs a throw-away PostgreSQL on 127.0.0.1:5433 (see README). Never point this at real data.
 set -uo pipefail
-H=$(cd "$(dirname "$0")" && pwd); cd "$H"
+H=$(cd "$(dirname "$0")" && pwd); cd "$H" || exit 1
 bash ./sync_sandbox.sh >/dev/null
 rc=0
 run() { local name=$1; shift; local out; out=$("$@" 2>&1); local st=$?; printf '%-46s %s\n' "$name" "$(echo "$out" | tail -1)"; [ $st -eq 0 ] || { rc=1; echo "$out" | grep -E 'FAIL|Error|error' | head -20; }; }
