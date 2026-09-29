@@ -166,12 +166,15 @@
         if (!empty($r['r_group_name']) || !empty($r['r_type'])) { $rightRows[] = $r; }
     }
 
-    // Totals
-    $sumTypes   = ['prt', 'grp', 'bal', 'pl', 'inv'];
+    // Totals: the sum of every row's *_balance_total - the model gives 0 to rows that only show a detail
+    // amount, so this is the same total the page shows (a fixed list of row types used to leave out
+    // primary accounts and unclassified ledgers).
     $leftTotal  = 0.0;
     $rightTotal = 0.0;
-    foreach ($leftRows as $lr)  { if (in_array($lr['l_type'] ?? '', $sumTypes, true))  { $leftTotal  += (float)($lr['l_balance_total'] ?? 0); } }
-    foreach ($rightRows as $rr) { if (in_array($rr['r_type'] ?? '', $sumTypes, true)) { $rightTotal += (float)($rr['r_balance_total'] ?? 0); } }
+    foreach ($leftRows as $lr)  { $leftTotal  += (float)($lr['l_balance_total'] ?? 0); }
+    foreach ($rightRows as $rr) { $rightTotal += (float)($rr['r_balance_total'] ?? 0); }
+    $leftTotal  = round($leftTotal, 2);
+    $rightTotal = round($rightTotal, 2);
 
     // Header info
     $from_date = $from_date ?? ($data['from_date'] ?? '');

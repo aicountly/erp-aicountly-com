@@ -1,0 +1,149 @@
+name: Deploy to production (cPanel)
+
+# Manual trigger only. There is deliberately no push or schedule trigger: merging
+# code must never upload to the live ERP by itself. Start it from
+# Actions > "Deploy to production (cPanel)" > Run workflow.
+#
+# What it does (details and one-time setup: .github/deploy/README.md):
+#   1. proves the exclusion rules on a synthetic tree (no network),
+#   2. connects over SSH using the repository secrets and runs an rsync DRY RUN,
+#   3. only when "dry_run" is unticked, uploads the changes.
+#
+# Never copied, overwritten or deleted on the server:
+#   .env  .htaccess  vendor  public  writable      (see .github/deploy/rsync-excludes.txt)
+# rsync is never run with --delete, so files that exist only on production survive.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Dry run (recommended first): list what WOULD be uploaded and transfer nothing.
+          Untick to really deploy (only allowed from the main branch).
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Never run two deployments at the same time, and never cancel one half way.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.dry_run && 'Dry run against production' || 'Deploy to production' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Lets you scope the secrets to an environment and, optionally, add required
+    # reviewers (Settings > Environments > production). Repository-level secrets work too.
+    environment: production
+    env:
+      DEPLOY_BRANCH: main
+      DRY_RUN: ${{ inputs.dry_run }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Refuse real deployments from any branch other than main
+        run: |
+          if [ "$DRY_RUN" = "false" ] && [ "$GITHUB_REF" != "refs/heads/$DEPLOY_BRANCH" ]; then
+            echo "::error::Real deployments are only allowed from '$DEPLOY_BRANCH' (this run is on '$GITHUB_REF'). Tick dry_run, or start the workflow from '$DEPLOY_BRANCH'."
+            exit 1
+          fi
+
+      - name: Check out the code to deploy
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Show what is being deployed
+        run: |
+          echo "Mode:   $([ "$DRY_RUN" = "false" ] && echo 'REAL DEPLOY' || echo 'dry run (nothing will be transferred)')"
+          git log -1 --format='Commit: %H%nAuthor: %an%nDate:   %ad%nTitle:  %s'
+
+      - name: Make sure rsync and OpenSSH are available
+        run: |
+          if ! command -v rsync >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq rsync openssh-client
+          fi
+          rsync --version | head -n 1
+
+      - name: Validate that all required secrets are configured
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Only checks presence; values are never printed.
+          missing=0
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required secret $name is not set (Settings > Secrets and variables > Actions). See .github/deploy/README.md."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install the SSH key and the pinned server host key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set +x
+          umask 077
+          ssh_dir="$RUNNER_TEMP/deploy-ssh"
+          mkdir -p "$ssh_dir"
+          chmod 700 "$ssh_dir"
+          # tr strips CRs from values pasted on Windows; printf guarantees a final newline.
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$ssh_dir/id_deploy"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_deploy" "$ssh_dir/known_hosts"
+
+          # Must be a valid private key without a passphrase (nothing is printed).
+          if ! ssh-keygen -y -P '' -f "$ssh_dir/id_deploy" >/dev/null 2>&1; then
+            echo "::error::SSH_PRIVATE_KEY is not a valid, passphrase-less private key. Paste the complete file including the BEGIN/END lines."
+            exit 1
+          fi
+
+          # The pinned host keys must contain an entry for the configured host and port.
+          port="${SSH_PORT:-22}"
+          if [ "$port" = "22" ]; then lookup="$SSH_HOST"; else lookup="[$SSH_HOST]:$port"; fi
+          if ! ssh-keygen -F "$lookup" -f "$ssh_dir/known_hosts" >/dev/null 2>&1; then
+            echo "::error::SSH_KNOWN_HOSTS has no host key for the configured SSH_HOST/SSH_PORT. Regenerate it with ssh-keyscan (see .github/deploy/README.md)."
+            exit 1
+          fi
+
+      - name: Self-test the exclusion rules (local simulation, no network)
+        run: bash .github/deploy/deploy.sh selftest
+
+      - name: Plan - rsync dry run against production (transfers nothing)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_KEY_FILE: ${{ runner.temp }}/deploy-ssh/id_deploy
+          SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/deploy-ssh/known_hosts
+        run: bash .github/deploy/deploy.sh plan
+
+      - name: Apply - upload the changes to production
+        if: ${{ inputs.dry_run == false }}
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_KEY_FILE: ${{ runner.temp }}/deploy-ssh/id_deploy
+          SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/deploy-ssh/known_hosts
+        run: bash .github/deploy/deploy.sh apply
+
+      - name: Remove SSH material from the runner
+        if: ${{ always() }}
+        run: rm -rf "$RUNNER_TEMP/deploy-ssh"

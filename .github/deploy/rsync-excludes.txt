@@ -1,0 +1,39 @@
+# rsync exclude rules for the production (cPanel) deployment.
+#
+# Single source of truth: deploy.sh uses this exact file for the self-test,
+# the dry-run plan and the real upload, and refuses to run if a mandatory rule
+# below is missing. Comments must be on their own line (rsync does not support
+# trailing comments).
+#
+# Pattern syntax:
+#   leading "/"   anchors the rule to the repository root
+#   trailing "/"  matches directories only
+#   no "/"        matches that exact name at ANY depth
+#
+# Excluded paths are never copied, overwritten or deleted on the server.
+# (deploy.sh never uses --delete, so files that exist only on production are
+# preserved as well.)
+
+# --- 1. Production-owned: must never be copied, uploaded or overwritten -----
+# Environment files that hold production credentials (any depth).
+.env
+.env.*
+# Web-server rules, including the cPanel-generated PHP settings (any depth,
+# so system/.htaccess and app/ThirdParty/tcpdf/tools/.htaccess are skipped too).
+.htaccess
+# Production Composer dependencies. Root only: app/Libraries/vendor is real
+# application code and must keep deploying.
+/vendor/
+# Production public assets and uploads.
+/public/
+# Runtime data: per-company files, cache, logs, sessions.
+/writable/
+
+# --- 2. Additional protective excludes (not on the owner's original list) ---
+# Server-level PHP settings written by cPanel's MultiPHP INI editor; a stale
+# repo copy must not overwrite what is configured on the server.
+/.user.ini
+/php.ini
+# Repository and CI internals must never land in a web-served directory.
+.git
+/.github/

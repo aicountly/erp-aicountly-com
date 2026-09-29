@@ -4,6 +4,7 @@ use App\Models\Admin\ReportingModel;
 use App\Models\CommonModel;
 use App\Controllers\BaseController;
 use App\Libraries\auth_session;
+use App\Libraries\ReportParams;
 
 class Reportings extends BaseController{
 
@@ -26,101 +27,72 @@ class Reportings extends BaseController{
      }   	
    }
    
+   /*
+     * Balance Sheet / Trial Balance / Profit & Loss.
+     *
+     * The request is normalised by ReportParams and the rows come from the model's load_*_view() dispatchers -
+     * the very same two calls the Excel/CSV exporter (Export.php) makes, so the file can only ever contain
+     * what this page shows. `export_qs` is the normalised query string the page's Excel/CSV buttons send back.
+     */
    public function balance_sheet() 
     { 
-     $view          = isset($_GET['view']) ? $_GET['view'] : 1;
-     $format        = isset($_GET['format']) ? $_GET['format'] : 1;
-     $nil_type      = isset($_GET['nil_type']) ? $_GET['nil_type'] : 1;
-	 $consolidated  = isset($_GET['consolidated']) ? $_GET['consolidated'] :0;
-     $from_date     = $_GET['from_date'] ?? '';
-     $to_date       = $_GET['to_date'] ?? '';
-     $from_date     = validate_fy_from_date($from_date);
-     $to_date       = validate_fy_to_date($to_date);
-     $balance_sheet = [];
-	
-     if($format == 1)
-        $balance_sheet = $this->ReportingModel->load_balance_sheet_horizontal($view,$from_date,$to_date,$nil_type,$consolidated);
-     if($format == 2)
-        $balance_sheet = $this->ReportingModel->load_balance_sheet_vertical($view,$from_date,$to_date,$nil_type,$consolidated);
-    
+     $p = ReportParams::balanceSheet($_GET);
+     $balance_sheet = $this->ReportingModel->load_balance_sheet_view(
+         $p['format'], $p['view'], $p['from_date'], $p['to_date'], $p['nil_type'], $p['consolidated']);
+
      $data     = [
             'base_url'      => $this->base_url,
             'data'          => $balance_sheet,
-            'view'          => $view,
-            'format'        => $format,
-            'nil_type'      => $nil_type,
-			'bo_id'         => $this->bo_id,
-			'from_date'     => $from_date,
-			'to_date'       => $to_date,
-			'consolidated'  => $consolidated
+            'view'          => $p['view'],
+            'format'        => $p['format'],
+            'nil_type'      => $p['nil_type'],
+            'bo_id'         => $this->bo_id,
+            'from_date'     => $p['from_date'],
+            'to_date'       => $p['to_date'],
+            'consolidated'  => $p['consolidated'],
+            'export_qs'     => ReportParams::toQuery($p),
+            'recon_notes'   => $this->ReportingModel->reportNotes('balance_sheet', $p['from_date'], $p['to_date'], $p['consolidated']),
         ];
-     if($format == 1)
-        return view($this->folder_path.'reports/balance_sheet_horizontal',$data);
-    else  if($format == 2)
-        return view($this->folder_path.'reports/balance_sheet_vertical',$data);
-	 else 
-		 return view($this->folder_path.'reports/balance_sheet_horizontal',$data); 
+     return view($this->folder_path . ($p['format'] === 2 ? 'reports/balance_sheet_vertical' : 'reports/balance_sheet_horizontal'), $data);
     }
 	
    public function trial_balance(){  	
-    	$nil_type  = isset($_GET['nil_type']) ? $_GET['nil_type'] : 0;    	
-    	$consolidated  = isset($_GET['consolidated']) ? $_GET['consolidated'] :0;    	
-        $view      = isset($_GET['view']) ? $_GET['view'] : 0;
-        $from_date = $_GET['from_date'] ?? '';
-        $to_date   = $_GET['to_date'] ?? '';
-        $from_date = validate_fy_from_date($from_date);
-        $to_date   = validate_fy_to_date($to_date);
-        $response  =[];
-        if($view == 0)
-            $response = $this->ReportingModel->load_trial_balance_grps($from_date,$to_date,$consolidated);
-        else if($view == 1)
-            $response = $this->ReportingModel->load_trial_balance_accnts($from_date,$to_date,$consolidated);
-        else
-            $response= $this->ReportingModel->load_trial_balance_opn($from_date,$to_date,$consolidated,$nil_type);
+        $p = ReportParams::trialBalance($_GET);
+        $response = $this->ReportingModel->load_trial_balance_view(
+            $p['view'], $p['from_date'], $p['to_date'], $p['consolidated'], $p['nil_type']);
 
-        $data['from_date']       = $from_date;
-        $data['to_date']         = $to_date; 
-		$data['nil_type']        = $nil_type;
-        $data['view']            = $view;
+        $data['from_date']       = $p['from_date'];
+        $data['to_date']         = $p['to_date']; 
+		$data['nil_type']        = $p['nil_type'];
+        $data['view']            = $p['view'];
 		$data['bo_id']           = $this->bo_id;
 		$data['base_url']        = $this->base_url;
 		$data['response']        = $response; 	
-		$data['consolidated']    = $consolidated; 
+		$data['consolidated']    = $p['consolidated']; 
+		$data['export_qs']       = ReportParams::toQuery($p);
+		$data['recon_notes']     = $this->ReportingModel->reportNotes('trial_balance', $p['from_date'], $p['to_date'], $p['consolidated']);
         return view($this->folder_path.'reports/trial_balance',$data);
     }
 	
    public function profit_loss(){
-	    $view      = isset($_GET['view']) ? $_GET['view'] : 1;
-        $format    = isset($_GET['format']) ? $_GET['format'] : 1;
-        $nil_type  = isset($_GET['nil_type']) ? $_GET['nil_type'] : 1;
-        $consolidated  = isset($_GET['consolidated']) ? $_GET['consolidated'] :0;        
-        $from_date = $_GET['from_date'] ?? '';
-        $to_date   = $_GET['to_date'] ?? '';
-        $from_date = validate_fy_from_date($from_date);
-        $to_date   = validate_fy_to_date($to_date);
-		$response  = [];
-        if($format == 1)
-             $response = $this->ReportingModel->load_profit_loss_horizontal($view,$from_date,$to_date,$nil_type,$consolidated);
-        if($format == 2)
-             $response = $this->ReportingModel->load_profit_loss_vertical($view,$from_date,$to_date,$nil_type,$consolidated);         
+        $p = ReportParams::profitLoss($_GET);
+        $response = $this->ReportingModel->load_profit_loss_view(
+            $p['format'], $p['view'], $p['from_date'], $p['to_date'], $p['nil_type'], $p['consolidated']);
         $data = [
             'base_url'      => $this->base_url,
             'data'          => $response,
-            'view'          => $view,
-            'format'        => $format,
-            'nil_type'      => $nil_type,
-			'from_date'     => $from_date,
-			'to_date'       => $to_date,
+            'view'          => $p['view'],
+            'format'        => $p['format'],
+            'nil_type'      => $p['nil_type'],
+			'from_date'     => $p['from_date'],
+			'to_date'       => $p['to_date'],
 			'bo_id'         => $this->bo_id,
-			'consolidated'  => $consolidated
+			'consolidated'  => $p['consolidated'],
+			'export_qs'     => ReportParams::toQuery($p),
+			'recon_notes'   => $this->ReportingModel->reportNotes('profit_loss', $p['from_date'], $p['to_date'], $p['consolidated']),
 			];
         
-         if($format == 1)
-            return view($this->folder_path.'reports/profit_loss_horizontal',$data);
-         else if($format == 2)
-            return view($this->folder_path.'reports/profit_loss_vertical',$data);
-		 else 
-			 return view($this->folder_path.'reports/profit_loss_horizontal',$data); 
+         return view($this->folder_path . ($p['format'] === 2 ? 'reports/profit_loss_vertical' : 'reports/profit_loss_horizontal'), $data);
     }
    
    public function ajax_voucher_approvals(){

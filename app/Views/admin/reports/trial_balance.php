@@ -157,6 +157,8 @@
 
 </div>
 
+<?= view('admin/reports/_recon_notes', ['notes' => $recon_notes ?? []]) ?>
+
 <div class="modal fade mt-5 modal-lg" id="calendermodal" tabindex="-1" aria-labelledby="calendermodallabel" style="display: none;" aria-hidden="true">
  <div class="modal-dialog">
   <div class="modal-content">
@@ -1734,28 +1736,16 @@ function getParameterByName(name, url = window.location.href) {
 		return decodeURIComponent(results[2].replace(/\+/g, ' '));
 	}
 
-function print_csv() {
-    var view         = getParameterByName('view');
-    var nil_type     = getParameterByName('nil_type');
-    var from_date    = getParameterByName('from_date');
-    var to_date      = getParameterByName('to_date');
-    var consolidated = getParameterByName('consolidated');
-    var stringparameters = "export=csv&view=" + view + "&nil_type=" + nil_type
-        + "&from_date=" + from_date + "&to_date=" + to_date
-        + "&consolidated=" + consolidated;
-    window.location.href = baseurl + "admin/export/trial_balance?" + stringparameters;
+// The export links carry exactly the parameters this page was built with (view, format, nil_type,
+// consolidated and the FY-clamped dates) - not whatever happens to be in the address bar - so the file
+// is produced from the same request as the grid.
+var EXPORT_QS = <?= json_encode((string)($export_qs ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+function export_report(kind)
+{
+    var qs = EXPORT_QS !== '' ? EXPORT_QS : window.location.search.substring(1);
+    window.location.href = baseurl + "admin/export/trial_balance?" + qs + "&export=" + kind;
 }
-
-function print_excel() {
-    var view         = getParameterByName('view');
-    var nil_type     = getParameterByName('nil_type');
-    var from_date    = getParameterByName('from_date');
-    var to_date      = getParameterByName('to_date');
-    var consolidated = getParameterByName('consolidated');
-    var stringparameters = "export=excel&view=" + view + "&nil_type=" + nil_type
-        + "&from_date=" + from_date + "&to_date=" + to_date
-        + "&consolidated=" + consolidated;
-    window.location.href = baseurl + "admin/export/trial_balance?" + stringparameters;
-}
+function print_csv()   { export_report('csv'); }
+function print_excel() { export_report('excel'); }
 		
  </script>	
