@@ -63,9 +63,13 @@ php run_audit.php --company 1 --fy 1 --branch 1
 Use `php spark audit:books --list` on the server to see the company / financial-year / branch ids.
 
 When the ledger itself does not balance (section 2), the audit groups each unbalanced voucher with the vouchers it is linked to
-(composition-scheme "GST PAID A/C" system journals, `vchbridgen` link types 3/4/5) and says what is *still* unbalanced. Add
-`--vouchers 3` to print the ledger rows of the largest ones (and of some that balance thanks to their link), `--voucher ID,ID` for
-specific vouchers, and `--csv FILE` to write every unbalanced voucher, with its status, for the accountant.
+(composition-scheme "GST PAID A/C" system journals, `vchbridgen` link types 3/4/5; a voucher linked to itself, a journal without
+ledger rows and a link into another year are told apart) and says what is *still* unbalanced. For each such group it looks for the legs
+that add up to the difference (for example the two credits on the CGST / SGST accounts): if they exist, the group balances exactly
+without them; if not, a leg is missing. Add `--vouchers 1` to print the ledger rows of the largest group of each kind (and of one that
+balances thanks to its link), `--voucher ID,ID` for specific vouchers, and `--csv FILE` to write every unbalanced voucher, with its
+status and what its difference equals, for the accountant. The condensed Profit & Loss is also compared line by line, old code against
+corrected.
 
 ## Run the audit on the server without deploying (private copy, live site untouched)
 

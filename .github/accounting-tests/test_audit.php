@@ -70,20 +70,31 @@ ok(str_contains($out, 'equals what the OLD carry-forward formula stores'), 'the 
 sh("cd " . escapeshellarg($H) . " && ./reload_db.sh pairs");
 $before = $digest();
 $csvFile = tempnam(sys_get_temp_dir(), 'unb') . '.csv';
-[$out, $d] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 2 --voucher 21,22,33 --csv ' . escapeshellarg($csvFile));
+[$out, $d] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 2 --voucher 21,22,33,37,38 --csv ' . escapeshellarg($csvFile));
 ok($digest() === $before, 'the audit leaves the database unchanged (linked vouchers, detail, csv)');
 $l = $d['linked'] ?? [];
 ok(($d['verdict']['fail'] ?? -1) === 0, 'no FAIL with linked vouchers', json_encode($d['verdict'] ?? null));
-ok(abs(($d['imbalance']['engine'] ?? 0) + 8680.0) < 0.005 && abs(($d['imbalance']['raw_sql'] ?? 0) + 8680.0) < 0.005, 'whole-ledger imbalance = 8,680.00 Cr (engine and SQL)', json_encode($d['imbalance'] ?? null));
-ok(($l['unbalanced_alone'] ?? 0) === 10 && ($l['linked'] ?? 0) === 6 && ($l['balance_with_link'] ?? 0) === 4, 'grouping: 10 unbalanced vouchers, 6 linked, 4 balance with their link', json_encode($l));
-ok(($l['groups_still_unbalanced'] ?? 0) === 5 && abs(($l['net_still_unbalanced'] ?? 0) + 8680.0) < 0.005 && ($l['linked_outside_window'] ?? 0) === 1, '5 groups remain, together 8,680.00 Cr; 1 linked voucher lies outside the year', json_encode($l));
-ok(preg_match('/11 Purchase\s+6\s+6\s+15,840\.00 Cr/', $out) === 1 && str_contains($out, 'unbalanced  of all'), 'by-type table: unbalanced purchases shown against all purchases of the year (6 of 6)');
+ok(abs(($d['imbalance']['engine'] ?? 0) + 15780.0) < 0.005 && abs(($d['imbalance']['raw_sql'] ?? 0) + 15780.0) < 0.005, 'whole-ledger imbalance = 15,780.00 Cr (engine and SQL)', json_encode($d['imbalance'] ?? null));
+ok(($l['unbalanced_alone'] ?? 0) === 14 && ($l['linked'] ?? 0) === 7 && ($l['balance_with_link'] ?? 0) === 4, 'grouping: 14 unbalanced vouchers, 7 linked, 4 balance with their link', json_encode($l));
+ok(($l['groups_still_unbalanced'] ?? 0) === 9 && abs(($l['net_still_unbalanced'] ?? 0) + 15780.0) < 0.005 && ($l['linked_outside_window'] ?? 0) === 2, '9 groups remain, together 15,780.00 Cr; 2 vouchers have their linked voucher outside the year', json_encode($l));
+ok(preg_match('/11 Purchase\s+10\s+10\s+22,940\.00 Cr/', $out) === 1 && str_contains($out, 'unbalanced  of all'), 'by-type table: unbalanced purchases shown against all purchases of the year (10 of 10)');
 ok(str_contains($out, 'branch GST registration type: 2 (composition scheme'), 'header: the branch GST registration type is shown (composition scheme)');
-ok(str_contains($out, '6 of the 10 unbalanced voucher(s) are linked to another voucher; 4 of them balance once the linked voucher is added'), 'the linked-voucher summary is printed');
-ok(str_contains($out, '5 voucher group(s) still do not balance, together 8,680.00 Cr'), 'the real residual is printed');
-foreach (['11 Purchase + 23 Composition GST journal', '11 Purchase (no linked voucher)', '23 Composition GST journal (no linked voucher)', '11 Purchase (linked voucher outside this year)'] as $kind) {
+ok(str_contains($out, '7 of the 14 unbalanced voucher(s) are linked to another voucher; 4 of them balance once the linked voucher is added; 2 more are linked to a voucher outside this year'), 'the linked-voucher summary is printed');
+ok(str_contains($out, '9 voucher group(s) still do not balance, together 15,780.00 Cr'), 'the real residual is printed');
+foreach (['11 Purchase + 23 Composition GST journal', '11 Purchase (no linked voucher)', '23 Composition GST journal (no linked voucher)', '11 Purchase (linked voucher in another year)',
+          '11 Purchase (journal rows inside the voucher)', '11 Purchase (linked journal has no ledger rows)'] as $kind) {
     ok(str_contains($out, $kind), "still-unbalanced kind named: $kind");
 }
+ok(preg_match('/11 Purchase \(no linked voucher\)\s+3\s+6,500\.00 Cr/', $out) === 1, 'the three unlinked purchases are summed in one line of the by-kind table (6,500.00 Cr)');
+// what the differences equal
+ok(preg_match('/the credit legs on CGST INPUT A\/C \+ SGST INPUT A\/C\s+1\s+1,800\.00 Cr/', $out) === 1, 'the difference of the linked pair 35+36 equals the credit legs on CGST INPUT + SGST INPUT (1,800.00)');
+ok(preg_match('/the credit legs on Central Tax \(Output\) \+ State Tax \(Output\)\s+1\s+2,400\.00 Cr/', $out) === 1, 'the difference of the self-linked purchase 37 equals the credit legs on Central Tax + State Tax (2,400.00)');
+ok(preg_match('/the credit legs on CESS INPUT A\/C \+ CGST INPUT A\/C \+ SGST INPUT A\/C\s+1\s+2,000\.00 Cr/', $out) === 1, 'the difference of purchase 40 equals THREE credit legs (CGST + SGST + cess = 2,000.00)');
+ok(preg_match('/the debit legs on GST PAID A\/C\s+1\s+500\.00 Dr/', $out) === 1, 'the single-sided journal 27 equals its debit to GST PAID A/C (500.00)');
+ok(preg_match('/\(no combination of up to 3 legs equals it: a leg is missing\)\s+5\s+10,080\.00 Cr/', $out) === 1, 'five groups have no combination of legs that equals the difference: a leg is missing (10,080.00)');
+ok(preg_match('/CGST INPUT A\/C\s+Cr 1,800\.00 in 2 group\(s\)\s+1,800\.00 Cr\s+Duties & Taxes \/ Current Liabilities/', $out) === 1, 'the accounts behind the legs: CGST INPUT A/C credited 1,800.00 in 2 groups, closing 1,800.00 Cr, placed under Duties & Taxes / Current Liabilities');
+ok(preg_match('/GST PAID A\/C\s+Dr 500\.00 in 1 group\(s\)\s+13,360\.00 Dr\s+\(primary account\) \/ Indirect Expenses/', $out) === 1, 'the accounts behind the legs: GST PAID A/C (an Indirect Expenses ledger) with its closing balance');
+// detail
 ok(preg_match('/voucher 23   date 2025-09-10   type 11 Purchase   sub-type 5   series 3   branch 1/', $out) === 1, 'detail: header of voucher 23');
 ok(preg_match('/Cr\s+59,000\.00\s+ABC Suppliers \(acc 103\)/', $out) === 1 && preg_match('/Dr\s+50,000\.00\s+Purchases \(acc 108\)/', $out) === 1, 'detail: the ledger rows of voucher 23 with account names');
 ok(preg_match('/linked voucher 24 \(link type 3, this voucher is the source\): date 2025-09-10, type 23 Composition GST journal/', $out) === 1, 'detail: the linked system journal 24 is shown');
@@ -92,20 +103,31 @@ ok(str_contains($out, 'Vouchers that balance only together with their linked vou
 ok(preg_match('/voucher 21: its debit\/credit difference \(1,800\.00 Cr\) equals the total tax in its GST summary \(1,800\.00\)/', $out) === 1, '--voucher 21: the difference equals the GST summary tax');
 ok(str_contains($out, 'supplier bill no: INV-101') && str_contains($out, 'stock rows: 1, value 10,000.00') && preg_match('/GST summary \(vchgstsumn, 1 row\(s\)\): taxable 10,000\.00\s+IGST 1,800\.00/', $out) === 1, 'detail: bill number, stock rows and GST summary of voucher 21');
 ok(preg_match('/GST summary \(vchgstsumn, 1 row\(s\)\): taxable 5,000\.00\s+IGST 500\.00.*total tax 500\.00/', $out) === 1 && !str_contains($out, 'voucher 33: its debit/credit difference'), '--voucher 33: a difference that is NOT the GST summary tax is not presented as if it were');
-ok(preg_match('/11 Purchase \(no linked voucher\)\s+2\s+4,500\.00 Cr/', $out) === 1, 'the two unlinked purchases are summed in one line of the by-kind table (4,500.00 Cr)');
 ok(preg_match('/voucher 25 .*linked voucher 27 \(link type 1, this voucher is the source\).*\[not a composition-scheme link: shown for information, not added\]/s', $out) === 1 && !preg_match('/voucher 25 [^\n]*\n(?:[^\n]*\n){0,12}?\s+together with the linked voucher/', $out), 'a type-1 link (credit note against invoice) is shown but never added to the voucher');
 ok(preg_match('/voucher 22 .*type 23 Composition GST journal.*linked voucher 21 \(link type 3, this voucher is the destination\): date 2025-08-05, type 11 Purchase/s', $out) === 1, '--voucher 22: the link is followed from the destination side too');
+$b37 = substr($out, (int)strrpos($out, 'voucher 37   date'), 1500); $b37 = substr($b37, 0, (int)strpos($b37, 'voucher 38   date') ?: 1500);
+ok(str_contains($b37, 'linked to itself (link type 3): its GST PAID A/C journal rows are posted inside this same voucher') && !str_contains($b37, 'together with the linked voucher') && !str_contains($b37, 'linked voucher 37'), '--voucher 37: a voucher linked to itself is named as such and is not added to itself');
+ok(str_contains($b37, 'the difference of this voucher group equals: Cr Central Tax (Output) 1,200.00 + State Tax (Output) 1,200.00'), '--voucher 37: the legs that equal the difference are named');
+$b38 = substr($out, (int)strrpos($out, 'voucher 38   date'));
+ok(preg_match('/linked voucher 39 \(link type 3, this voucher is the source\): date 2026-02-20, type 23 Composition GST journal, branch 1\s+\(no ledger rows\)/', $b38) === 1 && str_contains($b38, 'a leg is missing [linked journal has no ledger rows]'), '--voucher 38: the linked journal exists but has no ledger rows; a leg is missing');
 [$out1, ] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 1');
 $cmp = substr($out1, (int)strpos($out1, 'for comparison'));
-ok(preg_match('/voucher 21 /', $cmp) === 1 && !str_contains($out1, 'voucher 31 ') && preg_match('/voucher 23 /', $out1) === 1 && !str_contains($out1, 'voucher 33 '), '--vouchers 1 shows only the single largest of each kind (still unbalanced: 23, balanced together: 21)');
+$shownIds = []; foreach ([21, 23, 25, 27, 29, 31, 33, 35, 37, 38, 40] as $vid) { if (preg_match('/voucher ' . $vid . ' {3}date/', $out1)) { $shownIds[] = $vid; } }
+ok(preg_match('/voucher 21 /', $cmp) === 1 && $shownIds === [21, 23, 25, 27, 29, 37, 38], '--vouchers 1 shows the single largest group of each kind (25, 23, 37, 38, 27, 29) and one that balances together (21), and none of the smaller ones', json_encode($shownIds));
+ok(str_contains($out1, '----- 11 Purchase (no linked voucher): 3 group(s), 6,500.00 Cr -----') && str_contains($out1, '(1 per kind, largest first)'), '--vouchers: each kind is introduced with its group count and net');
 $rows = []; if (is_file($csvFile) && ($fh = fopen($csvFile, 'r'))) { $head = fgetcsv($fh); while (($r = fgetcsv($fh)) !== false) { $rows[(int)$r[0]] = array_combine($head, $r); } fclose($fh); }
 @unlink($csvFile);
-ok(count($rows) === 10, 'csv: one row per unbalanced voucher (10)', (string)count($rows));
+ok(count($rows) === 14, 'csv: one row per unbalanced voucher (14)', (string)count($rows));
 ok(($rows[21]['status'] ?? '') === 'balances together with linked voucher' && ($rows[21]['linked_voucher_ids'] ?? '') === '22' && ($rows[21]['diff_debit_minus_credit'] ?? '') === '-1800.00'
    && ($rows[21]['largest_leg_account'] ?? '') === 'ABC Suppliers' && ($rows[21]['gst_summary_total_tax'] ?? '') === '1800.00' && ($rows[21]['supplier_bill_no'] ?? '') === 'INV-101', 'csv: voucher 21 row', json_encode($rows[21] ?? null));
 ok(($rows[23]['status'] ?? '') === 'STILL UNBALANCED with linked voucher' && ($rows[23]['group_diff'] ?? '') === '-4500.00', 'csv: voucher 23 still unbalanced with its journal', json_encode($rows[23] ?? null));
-ok(($rows[25]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['diff_debit_minus_credit'] ?? '') === '500.00', 'csv: vouchers without a link', json_encode([$rows[25] ?? null, $rows[27] ?? null]));
-ok(($rows[29]['status'] ?? '') === 'STILL UNBALANCED (linked voucher outside this year)', 'csv: linked voucher in another year', json_encode($rows[29] ?? null));
+ok(($rows[25]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['diff_debit_minus_credit'] ?? '') === '500.00'
+   && ($rows[27]['group_difference_equals'] ?? '') === 'Dr GST PAID A/C 500.00', 'csv: vouchers without a link; the single-sided journal equals its debit to GST PAID A/C', json_encode([$rows[25] ?? null, $rows[27] ?? null]));
+ok(($rows[29]['status'] ?? '') === 'STILL UNBALANCED (linked voucher in another year)', 'csv: linked voucher in another year', json_encode($rows[29] ?? null));
+ok(($rows[35]['status'] ?? '') === 'STILL UNBALANCED with linked voucher' && ($rows[35]['group_difference_equals'] ?? '') === 'Cr CGST INPUT A/C 900.00 + SGST INPUT A/C 900.00' && ($rows[35]['linked_voucher_ids'] ?? '') === '36', 'csv: voucher 35 (linked journal balances by itself) - the difference equals the two tax credits', json_encode($rows[35] ?? null));
+ok(($rows[37]['status'] ?? '') === 'STILL UNBALANCED (journal rows inside the voucher)' && ($rows[37]['group_difference_equals'] ?? '') === 'Cr Central Tax (Output) 1,200.00 + State Tax (Output) 1,200.00', 'csv: voucher 37 (self-linked) - journal rows inside the voucher', json_encode($rows[37] ?? null));
+ok(($rows[40]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[40]['group_difference_equals'] ?? '') === 'Cr CGST INPUT A/C 900.00 + SGST INPUT A/C 900.00 + CESS INPUT A/C 200.00', 'csv: voucher 40 - three credit legs, largest first', json_encode($rows[40] ?? null));
+ok(($rows[38]['status'] ?? '') === 'STILL UNBALANCED (linked journal has no ledger rows)' && str_contains($rows[38]['group_difference_equals'] ?? '', 'a leg is missing'), 'csv: voucher 38 - linked journal without ledger rows', json_encode($rows[38] ?? null));
 // optional tables missing (an older database, a different build): rows still shown, nothing fails
 sh($psql . " -c " . escapeshellarg("DROP TABLE vchgstsumn, gstrinwsup, itemtxnmst"));
 [$out2, $d2] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 1');
