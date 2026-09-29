@@ -8,6 +8,8 @@ use App\Libraries\externaldb;
 
 
 class ReportingModel extends Model{
+
+	use ReportingPresenters;
 	
 	/** ====== TABLES (match your DB) ====== */
     private string $T_GROUPS   = 'accgrpmstn';
@@ -201,7 +203,7 @@ class ReportingModel extends Model{
     echo "{\"totalRecords\":" .  $total_records .  ",\"curPage\":" . $pq_curPage . ",\"data\":" . json_encode($records) . "}";        
 }
 
-public function load_balance_sheet_vertical($view, $from_date, $to_date, $nil_type, $consolidated)
+public function legacy_load_balance_sheet_vertical($view, $from_date, $to_date, $nil_type, $consolidated)
 {
     /**
      * Detailed mode fix:
@@ -470,7 +472,7 @@ public function load_balance_sheet_vertical($view, $from_date, $to_date, $nil_ty
 
         $ownFund = $displayLiab($sumCategorySigned($CAT_L_OWNER_FUND));
 
-        $plRows  = $this->load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
+        $plRows  = $this->legacy_load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
         $plLast  = end($plRows);
         $np      = (float)($plLast['l_balance_total'] ?? 0.0);
         $nl      = (float)($plLast['r_balance_total'] ?? 0.0);
@@ -594,7 +596,7 @@ public function load_balance_sheet_vertical($view, $from_date, $to_date, $nil_ty
     $liabilities_rows = array_merge($liabilities_rows, $emitCatBlock($CAT_L_OWNER_FUND, true));
 
     // Profit / Loss row
-    $plRows  =  $this->load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
+    $plRows  =  $this->legacy_load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
     $plSigned = 0.0;
     if (is_array($plRows) && !empty($plRows)) {
         $plLast  =  end($plRows);
@@ -658,6 +660,14 @@ public function openingStockTotal($opening_date_ymd, $cmp_id, $cmpfymasr_id, $it
 {
     $opening_date_ymd = date('Y-m-d', strtotime($opening_date_ymd));
     $fy_start_ymd     = $filters['fy_start_ymd'] ?? $this->getFyStartDateFromMaster($cmpfymasr_id);
+    if (!$fy_start_ymd) {                       // universal DB not answering: fall back to the session FY
+        $fy_start_ymd = $this->session->get('ses_company_fy_beginning');
+    }
+    if ($fy_start_ymd) {                        // the column may carry a time part; compare dates only
+        $fy_start_ymd = date('Y-m-d', strtotime((string)$fy_start_ymd));
+    }
+    // One consolidated flag for BOTH branches below (callers used either the 5th or the 6th argument).
+    $consolidated = (int)($filters['consolidated'] ?? $consolidated);
 
     $normalizeMethod = function ($m) {
         if ($m === null || $m === '') return null;
@@ -680,7 +690,7 @@ public function openingStockTotal($opening_date_ymd, $cmp_id, $cmpfymasr_id, $it
             ->where('v.cmpfymastr_id', (int)$cmpfymasr_id);
 
         // ✅ FIX: only filter by hobo_id when NOT consolidated
-        $isConsolidated = (int)($filters['consolidated'] ?? 0);
+        $isConsolidated = $consolidated;
         if ($isConsolidated === 0) {
             $hoboId = $filters['hobo_id'] ?? ($this->bo_id ?? null);
             if (!empty($hoboId)) {
@@ -704,8 +714,11 @@ public function openingStockTotal($opening_date_ymd, $cmp_id, $cmpfymasr_id, $it
         return function_exists('parseAmount') ? parseAmount($total) : $total;
     }
 
+    // Opening stock of a date after the FY start = closing stock at the end of the PREVIOUS day.
+    // (closingStockTotal() values stock as at its SECOND argument; the arguments used to be swapped,
+    //  which returned the stock at the end of the opening date itself.)
     $yesterday = date('Y-m-d', strtotime($opening_date_ymd . ' -1 day'));
-    return $this->StockStatusModel->closingStockTotal($yesterday, $opening_date_ymd,['consolidated' => (int)$consolidated]);
+    return $this->StockStatusModel->closingStockTotal($opening_date_ymd, $yesterday, ['consolidated' => $consolidated]);
 } 
 public function openingStockTotal_11_04_2026($opening_date_ymd, $cmp_id, $cmpfymasr_id, $itm_val_method_id, array $filters = [])
 {
@@ -1306,7 +1319,7 @@ private function sumOpeningValueFromTable($cmp_id, $cmpfymasr_id, $itm_val_metho
     }
 	
 
-public function load_balance_sheet_horizontal($view, $from_date, $to_date, $nil_type, $consolidated)
+public function legacy_load_balance_sheet_horizontal($view, $from_date, $to_date, $nil_type, $consolidated)
 {
     /*
      * Unified Balance Sheet (Condensed + Schedules + Detailed)
@@ -1552,7 +1565,7 @@ public function load_balance_sheet_horizontal($view, $from_date, $to_date, $nil_
     };
 
     /* E) Profit / Loss (from existing P&L) */
-    $plRows = $this->load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
+    $plRows = $this->legacy_load_profit_loss_horizontal(1, $from_date, $to_date, $nil_type, $consolidated);
     $netProfit = 0.0;
     $netLoss   = 0.0;
     if (is_array($plRows)) {
@@ -1877,13 +1890,8 @@ public function load_trial_balance_opn($from_date, $to_date, $consolidated, $nil
     $from_date = date('Y-m-d', strtotime($from_date));
     $to_date   = date('Y-m-d', strtotime($to_date));
 
-    // Use consistent FY source
-    $opn_inventory = $this->openingStockTotal(
-        $from_date,
-        $this->company_id,
-        $this->fy_id,
-        $this->session->get('ses_dflt_val_method')
-    );
+    // Opening stock at the FY start, scoped like the ledgers (same figure every other view uses)
+    $opn_inventory = $this->openingStockFigure($this->engine()->fyStart(), (int)$consolidated);
 
     $rows = [];
     $total_debit  = 0.0;
@@ -2064,7 +2072,7 @@ public function load_trial_balance_opn($from_date, $to_date, $consolidated, $nil
 
 	
 
-public function load_trial_balance_accnts($from_date, $to_date, $consolidated,$is_export=0)
+public function legacy_load_trial_balance_accnts($from_date, $to_date, $consolidated,$is_export=0)
 {
     $from_date = date('Y-m-d', strtotime($from_date));
     $to_date   = date('Y-m-d', strtotime($to_date));
@@ -2347,7 +2355,7 @@ function group_parent_info($acc_grp_id){
   	return $this->db->table($account_grp_tbl)->where('acc_grp_parent_id', $acc_grp_id)->get()->getRowArray();   	   
   }
   
-public function load_trial_balance_grps($from_date, $to_date, $consolidated = 0)
+public function legacy_load_trial_balance_grps($from_date, $to_date, $consolidated = 0)
 {
     $from_date = date('Y-m-d', strtotime($from_date));
     $to_date   = date('Y-m-d', strtotime($to_date));
@@ -2645,39 +2653,13 @@ public function load_trial_balance_grps($from_date, $to_date, $consolidated = 0)
 /* Helper left as-is (unused in the final balancing step, but keep if referenced elsewhere) */
 public function calculateDiffInOpBalance($from_date, $to_date, $consolidated = 0)
 {
-    $fyId = (int)($this->session->get('ses_comp_fy_id') ?? $this->fy_id ?? 0);
-
-    $opDebitQB = $this->db->table('accoppybal ob')
-        ->select('SUM(CASE WHEN ob.acc_op_bal > 0 THEN ob.acc_op_bal ELSE 0 END) AS debit_total', false)
-        ->where('ob.cmp_id', $this->company_id)
-        ->where('ob.cmpfymastr_id', $fyId);
-    if ($consolidated == 0) {
-        $opDebitQB->where('ob.hobo_id', $this->bo_id);
-    }
-    $debitResult         = $opDebitQB->get()->getRowArray();
-    $total_debit_opening = (float)($debitResult['debit_total'] ?? 0);
-
-    $opCreditQB = $this->db->table('accoppybal ob')
-        ->select('SUM(CASE WHEN ob.acc_op_bal < 0 THEN ABS(ob.acc_op_bal) ELSE 0 END) AS credit_total', false)
-        ->where('ob.cmp_id', $this->company_id)
-        ->where('ob.cmpfymastr_id', $fyId);
-    if ($consolidated == 0) {
-        $opCreditQB->where('ob.hobo_id', $this->bo_id);
-    }
-    $creditResult          = $opCreditQB->get()->getRowArray();
-    $total_credit_opening  = (float)($creditResult['credit_total'] ?? 0);
-
-    // ✅ FIX: pass consolidated flag so inventory uses same branch scope as accounts
-    $opn_inventory = $this->openingStockTotal(
-        $from_date,
-        $this->company_id,
-        $this->fy_id,
-        $this->session->get('ses_dflt_val_method'),
-        ['consolidated' => (int)$consolidated]   // ← ADDED
-    );
-    $total_debit_opening += $opn_inventory;
-
-    return $total_debit_opening - $total_credit_opening;
+    // Debit minus credit of ALL FY opening balances (every ledger of the company / FY / branch, mapped or not)
+    // plus the opening stock at the FY start. A non-zero value is a real opening imbalance in the books;
+    // nothing else is ever added to it.
+    $cons     = (int)$consolidated;
+    $eng      = $this->engine();
+    $openingStock = $this->openingStockFigure($eng->fyStart(), $cons);
+    return round($eng->openingTotalDirect((bool)$cons) + $openingStock, 2);
 }
 public function calculateDiffInOpBalance_11_04_2026($from_date, $to_date, $consolidated = 0)
 {   $fyId = (int)($this->session->get('ses_comp_fy_id') ?? $this->fy_id ?? 0);
@@ -3393,7 +3375,7 @@ public function GetParentBalance(array $all_group_ids, string $from_date, string
     	return $final;
   }
 
-public function load_profit_loss_horizontal($view, $from_date, $to_date, $nil_type, $consolidated)
+public function legacy_load_profit_loss_horizontal($view, $from_date, $to_date, $nil_type, $consolidated)
 {
     /*
      * VIEWS
@@ -4062,7 +4044,7 @@ public function 	GroupInfo($group_id){
 			->get()->getRowArray();
    }	
    
-   public function load_profit_loss_vertical($view, $from_date, $to_date, $nil_type, $consolidated)
+   public function legacy_load_profit_loss_vertical($view, $from_date, $to_date, $nil_type, $consolidated)
 {
     /*
      * VIEWS

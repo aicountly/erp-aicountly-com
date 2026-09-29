@@ -6,6 +6,7 @@ use App\Models\Admin\AccountsModel;
 use App\Models\Admin\ReportingModel;
 use App\Models\CommonModel;
 use App\Libraries\auth_session;
+use App\Libraries\ReportParams;
 class BalanceSheetPrint extends BaseController
 {
     protected $session;
@@ -49,12 +50,15 @@ class BalanceSheetPrint extends BaseController
      */
     public function index()
     {
-        $consolidated  = (int)$this->request->getGet('consolidated');// 0 or 1
-		$nil_type  = (int)$this->request->getGet('nil_type');// 0 or 1
-		$format    = (int)$this->request->getGet('format');// 1 horizontal, 2 vertical
-		$view      = (int)$this->request->getGet('view');//1 schedules, 0 condensed,2 detailed
-        $from_date = date('Y-m-d',strtotime($this->request->getGet('from_date'))); 
-        $to_date   = date('Y-m-d',strtotime($this->request->getGet('to_date')));
+        // Same parameter handling as the page and the Excel export (defaults, FY clamp), so the printout
+        // shows the figures the page shows. The two print templates are horizontal layouts, so the
+        // horizontal rows are always used (vertical rows would print blank in them).
+        $p            = ReportParams::balanceSheet($this->request->getGet());
+        $consolidated = $p['consolidated'];
+        $nil_type     = $p['nil_type'];
+        $view         = $p['view'];
+        $from_date    = $p['from_ymd'];
+        $to_date      = $p['to_ymd'];
 		
 		$company_info       = $this->CommonModel->get_company_info($this->company_id);
         $company_address    = $this->CommonModel->get_comp_ho_adrs_info($this->company_id, $this->bo_id);
@@ -62,11 +66,7 @@ class BalanceSheetPrint extends BaseController
         $gstin              = $get_comp_taxt_info['hobo_gstin'] ?? '';
 
 
-     if($format == 1)
-       $data = $this->ReportingModel->load_balance_sheet_horizontal($view,$from_date,$to_date,$nil_type,$consolidated);
-    
-	 if($format == 2)
-        $data = $this->ReportingModel->load_balance_sheet_vertical($view,$from_date,$to_date,$nil_type,$consolidated);
+     $data = $this->ReportingModel->load_balance_sheet_view(1, $view, $p['from_date'], $p['to_date'], $nil_type, $consolidated);
  
 		
         switch ($view) {
