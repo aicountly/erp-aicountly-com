@@ -10,7 +10,9 @@
 -- Whole-ledger imbalance: 790.00 Dr.
 
 INSERT INTO acctmaster (acc_id, cmp_id, acc_name, acc_is_restrict) VALUES (117, 1, 'GST PAID A/C', 2);
-INSERT INTO acctmaster (acc_id, cmp_id, acc_name) VALUES (141,1,'CGST INPUT'),(142,1,'SGST INPUT'),(146,1,'CGST X'),(147,1,'SGST X');
+INSERT INTO billsundry (bsd_id, bsd_name, bsd_type, bsd_input_output, tax_cat_type, tax_cat_sub_type) VALUES
+ (11,'CGST input',1,1,1,2),(12,'SGST input',1,1,1,3),(16,'CGST other',1,2,1,2),(17,'SGST other',1,2,1,3);
+INSERT INTO acctmaster (acc_id, cmp_id, acc_name, bsd_id) VALUES (141,1,'CGST INPUT',11),(142,1,'SGST INPUT',12),(146,1,'CGST X',16),(147,1,'SGST X',17);
 INSERT INTO undercrsmt (cmp_id,cmpfymastr_id,crs_mst_type,crs_mst_id,under_crs_mst_id,crs_mst_parent_id,under_main_id,crs_mst_is_primary) VALUES
  (1,1,1,117, 0,13, 0,1),                                            -- GST PAID A/C: primary account under Indirect Expenses
  (1,1,1,141,13, 4,13,0),(1,1,1,142,13, 4,13,0),(1,1,1,146,13, 4,13,0),(1,1,1,147,13, 4,13,0);   -- tax accounts under Duties & Taxes

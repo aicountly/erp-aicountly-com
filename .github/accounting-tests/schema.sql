@@ -1,6 +1,6 @@
 -- SANDBOX-ONLY schema for exercising the report code. Column names are taken from the
 -- application's own queries/inserts; production DDL is not in the repository.
-DROP TABLE IF EXISTS hobogstinm, itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst CASCADE;
+DROP TABLE IF EXISTS hobogstinm, itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst, billsundry, cmptxnmstn, acctvchreg CASCADE;
 
 CREATE TABLE cmpfymastr (
   cmpfymastr_id serial PRIMARY KEY, cmp_id int, fy_beg_date date, fy_end_date date,
@@ -59,3 +59,13 @@ CREATE TABLE vchgstsumn (
 CREATE TABLE gstrinwsup (cmp_id int, vch_txn_id int, inwsup_bill_ref_no text);
 CREATE TABLE itemtxnmst (cmp_id int, hobo_id int, vch_txn_id int, itm_id_unit_id text, itm_txn_qty numeric(18,4), itm_txn_amt numeric(18,2), itm_txn_type int DEFAULT 1, itm_txn_dr_cr int DEFAULT 1);
 CREATE TABLE hobogstinm (cmp_id int, hobo_id int, hobo_gstin_type int);
+-- bill-sundry master: which ledger carries which GST component. bsd_type 1 = tax, bsd_input_output 1 = input
+-- / 2 = output, tax_cat_type 1 = GST, tax_cat_sub_type 1 IGST 2 CGST 3 SGST 4 UTGST 5 cess.
+CREATE TABLE billsundry (bsd_id int PRIMARY KEY, bsd_name text, bsd_type int, bsd_input_output int, tax_cat_type int, tax_cat_sub_type int);
+-- the composition-transaction row every ledger row points at, and the voucher register (a listing table)
+CREATE TABLE cmptxnmstn (txn_id serial PRIMARY KEY, cmp_id int, vch_series_id int, vch_txn_id int, master_id int, master_id_type text);
+CREATE TABLE acctvchreg (
+  acct_vch_reg_id bigserial PRIMARY KEY, acct_vch_type int, cmp_id int, vch_txn_id int, txn_id int NULL,
+  vch_date date, acc_id int, acc_txn_dr_amt numeric(18,2) DEFAULT 0, acc_txn_cr_amt numeric(18,2) DEFAULT 0,
+  vch_narr text, hobo_id int, acc_txn_type int DEFAULT 1
+);
