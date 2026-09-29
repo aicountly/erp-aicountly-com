@@ -135,6 +135,14 @@ foreach (['balance_sheet', 'profit_loss', 'trial_balance'] as $rep) {
             $isXlsx = $kind === 'excel';
             ok($isXlsx ? str_starts_with($bytes, 'PK') : !str_starts_with($bytes, 'PK'), "$tag has the right file type");
             $file = $isXlsx ? xlsx_rows($bytes) : csv_rows($bytes);
+            // the sub-title states the filters the page was set to
+            $sub = (string)cell($file, 2, 0); $pp = []; parse_str($qs, $pp);
+            if ($rep !== 'trial_balance') {
+                ok(str_contains($sub, 'Nil balances ' . ((int)$pp['nil_type'] === 0 ? 'excluded' : 'included')), "$tag subtitle states the nil-balance setting", "($sub)");
+                ok(str_contains($sub, ['Condensed', 'Schedules', 'Detailed'][(int)$pp['view']] . ' view'), "$tag subtitle states the view", "($sub)");
+            }
+            ok(((int)$pp['consolidated'] === 1) === str_contains($sub, 'onsolidated'), "$tag subtitle mentions consolidation exactly when ticked", "($sub)");
+            ok(str_contains($sub, (string)$pp['to_date']), "$tag subtitle carries the report date", "($sub)");
             if ($rep === 'trial_balance')       { compare_tb($tag, $rows, $file); }
             elseif ($format === 2)              { compare_vertical($tag, $rows, $file); }
             else                                { compare_horizontal($tag, $rows, $file, $view === 2); }

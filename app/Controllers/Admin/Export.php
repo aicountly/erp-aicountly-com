@@ -172,7 +172,7 @@ private function reportTitle(): string
 private function reportScope(array $p, array $viewNames, bool $withNil): string
 {
     $s = '  |  ' . ($viewNames[$p['view']] ?? '') . ' view';
-    if ($withNil) { $s .= '  |  Nil balances ' . ($p['nil_type'] === 0 ? 'included' : 'excluded'); }
+    if ($withNil) { $s .= '  |  Nil balances ' . ($p['nil_type'] === 0 ? 'excluded' : 'included'); }   // nil_type 0 = "Exclude Nil Balances" is on
     if ($p['consolidated']) { $s .= '  |  Consolidated (all branches)'; }
     return $s;
 }

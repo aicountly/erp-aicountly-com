@@ -939,8 +939,11 @@ trait ReportingPresenters
             $one  = $n === 1;
             $what = $report === 'profit_loss'
                 ? ($one ? "it is not part of this year's result" : "they are not part of this year's result")
-                : ($one ? "it is shown as 'Profit & Loss b/f (opening)' and is part of 'Difference in Opening'"
-                        : "they are shown as 'Profit & Loss b/f (opening)' and are part of 'Difference in Opening'");
+                : ($report === 'balance_sheet'
+                    ? ($one ? "it is shown as 'Profit & Loss b/f (opening)' and is part of 'Difference in Opening'"
+                            : "they are shown as 'Profit & Loss b/f (opening)' and are part of 'Difference in Opening'")
+                    : ($one ? "it is listed with that opening balance included and is part of 'Difference in Opening'"
+                            : "they are listed with those opening balances included and are part of 'Difference in Opening'"));
             $notes[] = ['level' => 'info', 'text' => sprintf(
                 "%s (net %s). Profit & loss accounts start every year at zero and the application does not accept opening balances for them, so %s written by another routine (typically the year-end carry-forward); %s.",
                 $n === 1 ? '1 profit & loss ledger carries an opening balance' : $n . ' profit & loss ledgers carry opening balances',
