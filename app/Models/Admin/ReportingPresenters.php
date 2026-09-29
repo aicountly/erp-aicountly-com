@@ -720,8 +720,11 @@ trait ReportingPresenters
     /**
      * Why a Balance Sheet / Trial Balance does not tally, straight from the ledger (no adjustment):
      * the difference of the two sides, the debit-minus-credit of all ledger rows, and the vouchers responsible.
-     * `gst_paid_journals` is the part caused by the composition-scheme "GST PAID A/C" system journal
-     * (voucher type 23), which the application posts as a single debit row.
+     * `gst_paid_journals` is the debit-minus-credit of the vouchers of type 23 (the composition-scheme
+     * "GST PAID A/C" system journals) taken on their own; `other` is that of all other vouchers.
+     * A purchase or sale and its journal belong together (link table vchbridgen), so the two figures
+     * describe where the rows are, not what caused the difference: `php spark audit:books` names the
+     * vouchers and the legs.
      */
     public function reconciliation($from_date, $to_date, $consolidated = 0, int $voucherLimit = 200): array
     {
@@ -917,10 +920,10 @@ trait ReportingPresenters
                     '%s does not tally because the ledger itself is out of balance: total debit minus total credit of all posted entries (FY start to %s) = %s.',
                     $label, date('d-m-Y', strtotime((string)$to_date)), $fmt($imb))];
                 if (abs($rec['gst_paid_journals']) >= 0.005) {
-                    $notes[] = ['level' => 'warn', 'text' => 'Of this, GST PAID A/C system journals (composition scheme, posted as a single debit row): ' . $fmt($rec['gst_paid_journals']) . '.'];
+                    $notes[] = ['level' => 'warn', 'text' => 'Of this, the System Journal vouchers (composition-scheme GST PAID A/C journals) taken on their own: ' . $fmt($rec['gst_paid_journals']) . '.'];
                 }
                 if (abs($rec['other']) >= 0.005) {
-                    $notes[] = ['level' => 'warn', 'text' => 'Of this, other vouchers whose debit and credit rows differ (e.g. approval pending on one leg only): ' . $fmt($rec['other']) . '.'];
+                    $notes[] = ['level' => 'warn', 'text' => 'Of this, all other vouchers whose debit and credit rows differ: ' . $fmt($rec['other']) . '. A purchase or sale and its linked GST PAID A/C journal belong together; the audit command (php spark audit:books) lists them voucher by voucher.'];
                 }
             }
             [$opStock] = $this->stockFigures($s->from, $s->to, $consolidated, true);

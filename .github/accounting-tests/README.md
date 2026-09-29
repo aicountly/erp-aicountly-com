@@ -22,7 +22,7 @@ PHP 8.1+ CLI with `pgsql`, `zip`, `xml`, `mbstring`, `gd`; `node` for the export
 |---|---|---|
 | `test_engine.php`, `test_pl.php`, `test_bs.php`, `test_tb.php` | basic | hand-computed figures: P&L net profit 28,200 in all six layouts, Balance Sheet 891,200 = 891,200, Trial Balance balances and every ledger equals independent SQL |
 | `test_pl_bsd.php` | basic + | bill-sundry (tax) ledgers directly under a profit & loss category (found on real data): the corrected report includes them in all six layouts, the old condensed view left them out |
-| `test_invariants.php` | stress | 312 identities over 8 scenarios (branch / consolidated, several periods): TB debit-credit = raw ledger imbalance, BS assets-liabilities = ledger imbalance, P&L identical in every layout, BS profit line = FY-to-date P&L |
+| `test_invariants.php` | stress | 314 checks over 8 scenarios (branch / consolidated, several periods): TB debit-credit = raw ledger imbalance, BS assets-liabilities = ledger imbalance, P&L identical in every layout, BS profit line = FY-to-date P&L, the warning banner splits the difference by where the rows are and states no assumed cause |
 | `test_export.php` | stress | the REAL `Reportings` controller (page rows) against the REAL `Export` controller (xlsx and csv read back): 144 files, every cell, blanks, totals, notes |
 | `render_views.php` | stress / basic | the real report views render without PHP notices, the banner appears only when the ledger is out of balance, the Excel/CSV buttons build the right URL |
 | `test_rollover.php` | rollover | the REAL `FYModel` roll-over over three years: openings equal an independent computation and the opening trial balance nets to zero |
@@ -30,7 +30,9 @@ PHP 8.1+ CLI with `pgsql`, `zip`, `xml`, `mbstring`, `gd`; `node` for the export
 | `demo_legacy_failures.php` | stress | the same identities against the OLD calculation (kept as `legacy_*`): it fails, which is the root cause of the mismatches |
 | `mutation_export.py` | stress | 13 deliberate breakages of the export path (swap debit/credit, drop a row, blank->0, abs(), lose a note, wrong nil_type / consolidated / view / dates ...) must each make `test_export.php` fail |
 
-`fixture_pairs.sql` models composition-scheme purchases: the purchase voucher credits the supplier with base + GST but debits only the base, and a linked type-23 system journal (vchbridgen type 3) carries the GST as a single debit to "GST PAID A/C" - some pairs balance, some do not, some have no link, one links to another year, and a type-1 (credit note) link must never merge groups.
+`fixture_pairs.sql` models the composition-scheme purchases found on real data: the purchase voucher credits the supplier with base + GST but debits only the base, and a linked type-23 system journal (vchbridgen type 3) debits "GST PAID A/C" - sometimes as a single debit, sometimes with a credit to each tax account so that the journal balances by itself and the group is short by exactly those credits. Some pairs balance, some do not, some have no link, one links to another year, one links to itself (the journal rows are inside the purchase), one to a journal without ledger rows, one needs three legs to explain its difference, and a type-1 (credit note) link must never merge groups. The two Output-tax accounts sit under Indirect Expenses (a Profit & Loss category), the input-tax accounts under Duties & Taxes (Balance Sheet).
+
+`fixture_gst.sql` adds a sale whose journal (link type 4) credits the tax accounts but debits GST PAID A/C with 0.00, a purchase whose difference two different sets of legs explain, and one with two identical credit lines.
 
 `fixture_stress.sql` holds the awkward real-world patterns found in the audit: a debit-only composition-scheme
 "GST PAID A/C" journal (voucher type 23), a voucher approved on one leg only, an unmapped ledger, a ledger whose group

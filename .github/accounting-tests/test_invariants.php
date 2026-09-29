@@ -68,5 +68,10 @@ $ids=array_column($rec['vouchers'],'vch_txn_id'); sort($ids);
 ok($ids===[9,13],"reconciliation: unbalanced vouchers are exactly #9 (GST paid) and #13 (pending party leg)",json_encode($ids));
 ok($near($rec['other'],-700.0),"reconciliation: the rest (-700) is the pending-approval voucher","(got {$rec['other']})");
 
+// ---- the banner splits the difference by where the rows are (System Journal vouchers / all others) and asserts no cause ----
+$noteText = implode("\n", array_column($m->reportNotes('balance_sheet',$FY0,'2026-03-31',0),'text'));
+ok(strpos($noteText,'System Journal vouchers')!==false && strpos($noteText,'all other vouchers')!==false,"banner: difference split into System Journal vouchers and all other vouchers");
+ok(stripos($noteText,'single debit row')===false && stripos($noteText,'approval pending on one leg')===false,"banner: no assumed cause (single debit row / pending approval) is stated");
+
 echo "\nscenarios run: $scen | checks passed: $pass | failed: $fail\n";
 exit($fail?1:0);

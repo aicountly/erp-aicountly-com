@@ -464,8 +464,9 @@ class AccountingEngine
 
     /**
      * Vouchers whose debit and credit rows differ (FY start .. to), biggest first.
-     * `vch_type_id` 23 is the composition-scheme "GST PAID A/C" system journal, which the
-     * application posts as a single debit row.
+     * `vch_type_id` 23 is the composition-scheme "GST PAID A/C" system journal. It is posted next to
+     * a purchase or a sale (link table vchbridgen) and the two belong together, so a voucher that is
+     * out of balance can be balanced by its journal, or the other way round.
      *
      * @return array<int,array{vch_txn_id:int,dr:float,cr:float,diff:float,vch_type_id:?int,vch_date:?string}>
      */
