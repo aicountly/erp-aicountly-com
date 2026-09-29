@@ -114,7 +114,9 @@ class AuditBooks extends BaseCommand
                 return 1;
             }
             $this->openSession($fyRow);
-            $active = 0; foreach ($this->snap()->accounts as $a) { if ($a['op'] != 0.0 || $a['pre'] != 0.0 || $a['dr'] != 0.0 || $a['cr'] != 0.0) { $active++; } }
+            try { $first = $this->snap(); }
+            catch (\Throwable $e) { CLI::error('The ledger could not be read: ' . $e->getMessage()); return 1; }
+            $active = 0; foreach ($first->accounts as $a) { if ($a['op'] != 0.0 || $a['pre'] != 0.0 || $a['dr'] != 0.0 || $a['cr'] != 0.0) { $active++; } }
             $this->tol = 0.02 + 0.005 * $active;
             $this->header($fyRow);
             $this->guard('ledger', fn() => $this->checkLedger());
@@ -275,19 +277,23 @@ class AuditBooks extends BaseCommand
 
     private function listCompanies(): int
     {
-        $this->heading('Companies, financial years, branches (read only)');
+        // With --company ID only that company is read (much lighter on a large multi-company database).
+        $only = (int)$this->opt('company');
+        $this->heading('Companies, financial years, branches (read only)' . ($only ? "  - company $only" : ''));
         $cos = []; $fys = []; $bos = [];
         try {
             $u = $this->univ();
-            $cos = $u->table('cmpmastern')->select('cmp_id, cmp_name')->orderBy('cmp_id')->get()->getResultArray();
-            $fys = $u->table('cmpfymastr')->select('cmpfymastr_id, cmp_id, fy_beg_date, fy_end_date, is_imported')->orderBy('cmp_id')->orderBy('fy_beg_date')->get()->getResultArray();
-            $bos = $u->table('hobomaster')->select('cmp_id, hobo_id, hobo_name')->orderBy('cmp_id')->orderBy('hobo_id')->get()->getResultArray();
+            $q = fn($t, $cols, $order) => (function () use ($u, $t, $cols, $order, $only) { $b = $u->table($t)->select($cols); if ($only) { $b->where('cmp_id', $only); } foreach ($order as $o) { $b->orderBy($o); } return $b->get()->getResultArray(); })();
+            $cos = $q('cmpmastern', 'cmp_id, cmp_name', ['cmp_id']);
+            $fys = $q('cmpfymastr', 'cmpfymastr_id, cmp_id, fy_beg_date, fy_end_date, is_imported', ['cmp_id', 'fy_beg_date']);
+            $bos = $q('hobomaster', 'cmp_id, hobo_id, hobo_name', ['cmp_id', 'hobo_id']);
         } catch (\Throwable $e) {
             CLI::write('  (company master not readable: ' . $e->getMessage() . ')', 'yellow');
         }
         $vol = [];
         try {
-            foreach ($this->db->query('SELECT cmp_id, COUNT(*) n, MIN(acc_txn_date) d0, MAX(acc_txn_date) d1 FROM accttxnmst GROUP BY cmp_id ORDER BY cmp_id')->getResultArray() as $r) { $vol[(int)$r['cmp_id']] = $r; }
+            $sql = 'SELECT cmp_id, COUNT(*) n, MIN(acc_txn_date) d0, MAX(acc_txn_date) d1 FROM accttxnmst ' . ($only ? 'WHERE cmp_id = ' . $only . ' ' : '') . 'GROUP BY cmp_id ORDER BY cmp_id';
+            foreach ($this->db->query($sql)->getResultArray() as $r) { $vol[(int)$r['cmp_id']] = $r; }
         } catch (\Throwable $e) {
             CLI::write('  (ledger volume not readable: ' . $e->getMessage() . ')', 'yellow');
         }
@@ -299,7 +305,18 @@ class AuditBooks extends BaseCommand
             CLI::newLine();
             CLI::write(sprintf('Company %d  %s', $id, $name), 'white');
             CLI::write('   ledger rows: ' . ($v ? $v['n'] . '  (' . $v['d0'] . ' .. ' . $v['d1'] . ')' : 'none'));
-            foreach ($fys as $f) { if ((int)$f['cmp_id'] === (int)$id) { CLI::write(sprintf('   --fy %-4d %s .. %s', $f['cmpfymastr_id'], $f['fy_beg_date'], $f['fy_end_date'])); } }
+            foreach ($fys as $f) {
+                if ((int)$f['cmp_id'] !== (int)$id) { continue; }
+                $extra = '';
+                if ($only) {                                                   // per-year volume, only when a single company was asked for
+                    try {
+                        $a = $this->db->query('SELECT COUNT(*) n, COUNT(DISTINCT hobo_id) b FROM accttxnmst WHERE cmp_id = ? AND acc_txn_date BETWEEN ? AND ?', [$id, date('Y-m-d', strtotime((string)$f['fy_beg_date'])), date('Y-m-d', strtotime((string)$f['fy_end_date']))])->getRowArray();
+                        $o = $this->db->query('SELECT COUNT(*) n FROM accoppybal WHERE cmp_id = ? AND cmpfymastr_id = ?', [$id, (int)$f['cmpfymastr_id']])->getRowArray();
+                        $extra = sprintf('   ledger rows %s (%s branch(es)), opening-balance rows %s', $a['n'], $a['b'], $o['n']);
+                    } catch (\Throwable $e) { $extra = '   (volume not readable)'; }
+                }
+                CLI::write(sprintf('   --fy %-4d %s .. %s%s', $f['cmpfymastr_id'], $f['fy_beg_date'], $f['fy_end_date'], $extra));
+            }
             foreach ($bos as $b) { if ((int)$b['cmp_id'] === (int)$id) { CLI::write(sprintf('   --branch %-3d %s', $b['hobo_id'], $b['hobo_name'])); } }
         }
         CLI::newLine();
@@ -502,7 +519,7 @@ class AuditBooks extends BaseCommand
         }
         $plSub = count(array_filter($sub, fn($x) => $x['pl'] === 'P&L'));
         $this->check('subgroups', $plSub ? 'INFO' : 'OK', count($sub) . " sub-group(s) exist, $plSub of them under profit & loss categories. The old Profit & Loss (Schedules / Detailed views) counted a sub-group's balance twice - in the sub-group and again in its parent group - which distorted the profit and, through its profit line, the Balance Sheet:");
-        usort($sub, fn($a, $b) => [$b['pl'] === 'P&L', $b['name']] <=> [$a['pl'] === 'P&L', $a['name']]);
+        usort($sub, fn($a, $b) => [$a['pl'] === 'P&L' ? 0 : 1, $a['name']] <=> [$b['pl'] === 'P&L' ? 0 : 1, $b['name']]);
         $this->table($sub, ['name' => 'sub-group', 'category' => 'category', 'pl' => 'type', '>closing' => '>closing', '>movement' => '>movement'], $this->limit);
     }
 
@@ -743,8 +760,13 @@ class AuditBooks extends BaseCommand
         $m = $this->m; $cons = (int)$this->cons; $f = $this->from; $t = $this->to;
         $rows = [];
         $try = function (string $label, callable $old, callable $new) use (&$rows) {
-            try { $o = $old(); } catch (\Throwable $e) { $o = 'error: ' . mb_substr($e->getMessage(), 0, 60); }
-            try { $n = $new(); } catch (\Throwable $e) { $n = 'error'; }
+            $call = function (callable $fn, string $tag) {
+                $this->db->simpleQuery('SAVEPOINT legacy_sp');
+                try { $v = $fn(); $this->db->simpleQuery('RELEASE SAVEPOINT legacy_sp'); return $v; }
+                catch (\Throwable $e) { $this->db->simpleQuery('ROLLBACK TO SAVEPOINT legacy_sp'); return $tag . mb_substr($e->getMessage(), 0, 60); }
+            };
+            $o = $call($old, 'error: ');
+            $n = $call($new, 'error: ');
             $rows[] = ['report' => $label, '>old' => is_float($o) ? $this->sn($o) : $o, '>corrected' => is_float($n) ? $this->sn($n) : $n, '>change' => (is_float($o) && is_float($n)) ? $this->sn($n - $o) : ''];
         };
         $tbdiff = fn(array $r) => (function () use ($r) { [$d, $c] = $this->tbTotals($r); return round($d - $c, 2); })();
