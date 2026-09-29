@@ -58,3 +58,23 @@ php run_audit.php --company 1 --fy 1 --branch 1
 ```
 
 Use `php spark audit:books --list` on the server to see the company / financial-year / branch ids.
+
+## Run the audit on the server without deploying (private copy, live site untouched)
+
+The audit only needs the new code, not a deployment. Build a private copy of the live ERP, overlay the changed
+files on it, and run `spark` there; it reads the same database inside a read-only transaction.
+
+```bash
+LIVE=/home/CPANELUSER/public_html      # live ERP folder (contains spark, app/, vendor/, .env)
+STAGE=$HOME/erp-audit                  # private copy, outside the web root
+PHP=/opt/cpanel/ea-php81/root/usr/bin/php
+mkdir -p "$STAGE" && cd "$LIVE" && cp -a app system spark composer.json .env "$STAGE"/
+ln -sfn "$LIVE/vendor" "$STAGE/vendor"
+unzip -o -q ~/erp-accounting-update.zip -d "${STAGE:?}"      # the files changed on the branch (git diff --name-only <backup> HEAD -- app)
+mkdir -p "$STAGE/public" "$STAGE"/writable/{logs,cache,session,debugbar,errors}
+cd "$STAGE" && $PHP spark audit:books --list --company ID
+$PHP -d memory_limit=1024M spark audit:books --company ID --fy FYID --branch BRANCHID --json ~/audit.json | tee ~/audit.txt
+```
+
+Never extract the overlay into the live folder: a real deployment goes through the workflow, which keeps backups.
+Delete `$STAGE` afterwards (it holds a copy of `.env`).
