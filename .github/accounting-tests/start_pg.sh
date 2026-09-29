@@ -3,7 +3,7 @@
 #   ERP_TEST_PGPORT (default 5433)   ERP_TEST_PGROOT (default /var/tmp/erp_pgtest)
 set -euo pipefail
 PORT=${ERP_TEST_PGPORT:-5433}; ROOT=${ERP_TEST_PGROOT:-/var/tmp/erp_pgtest}
-BIN=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1 || true)
+BIN=$(find /usr/lib/postgresql -mindepth 2 -maxdepth 2 -type d -name bin 2>/dev/null | sort -V | tail -n 1 || true)
 [ -n "$BIN" ] || { echo "PostgreSQL server binaries not found under /usr/lib/postgresql" >&2; exit 1; }
 as_pg() { if [ "$(id -u)" = 0 ]; then su postgres -s /bin/bash -c "$1"; else bash -c "$1"; fi; }
 if [ ! -d "$ROOT/data" ]; then
