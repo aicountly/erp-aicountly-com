@@ -45,6 +45,15 @@ if ($fn > 0 && $at > $fn) {
     file_put_contents($sbx, $orig);
     ok(preg_match('/Sales\s+99,700\.00\s+100,700\.00\s+\+1,000\.00/', $outM) === 1 && str_contains($outM, 'the lines the correction changed'), 'old vs corrected P&L (condensed): the line that moved is named with old / corrected / change', substr($outM, (int)strpos($outM, 'Profit & Loss (condensed'), 400));
 } else { ok(false, 'could not patch the sandbox copy of the old P&L code for the line-by-line test'); }
+// two bill-sundry (tax) ledgers placed directly under Indirect Expenses: the old condensed P&L leaves them out
+sh($psql . " -c " . escapeshellarg("INSERT INTO acctmaster (acc_id, cmp_id, acc_name, bsd_id) VALUES (150,1,'Tax Output A',3),(151,1,'Tax Output B',4);
+  INSERT INTO undercrsmt (cmp_id,cmpfymastr_id,crs_mst_type,crs_mst_id,under_crs_mst_id,crs_mst_parent_id,under_main_id,crs_mst_is_primary) VALUES (1,1,14,150,0,13,0,0),(1,1,14,151,0,13,0,0);
+  INSERT INTO accttxnmst (cmp_id,hobo_id,acc_id,acc_txn_date,acc_txn_dr_cr,acc_txn_amt,acc_txn_type,txn_id,vch_txn_id) VALUES (1,1,110,'2025-07-01',1,2000,1,20,20),(1,1,150,'2025-07-01',2,1000,1,20,20),(1,1,151,'2025-07-01',2,1000,1,20,20);
+  INSERT INTO vchtxnconso (vch_txn_id,cmp_id,hobo_id,txn_id,vch_type_id,vch_date) VALUES (20,1,1,20,1,'2025-07-01');"));
+[$outBs, ] = $audit('--company 1 --fy 1 --branch 1 --no-excel');
+ok(preg_match('/Indirect Expenses\s+[\d,]+\.\d\d\s+[\d,]+\.\d\d\s+-2,000\.00/', $outBs) === 1, 'old condensed P&L: two bill-sundry ledgers under Indirect Expenses are left out (Indirect Expenses 2,000.00 too high)');
+ok(str_contains($outBs, 'bill-sundry (tax) ledgers that sit under a profit & loss category') && preg_match('/Tax Output A\s+Indirect Expenses\s+1,000\.00 Cr/', $outBs) === 1 && str_contains($outBs, 'Together they explain the change on: Indirect Expenses (-2,000.00)'), 'the audit names those ledgers and shows that together they explain the change');
+sh("cd " . escapeshellarg($H) . " && ./reload_db.sh stress");
 [$outC, $dC] = $audit('--company 1 --fy 1 --consolidated --no-legacy --no-excel');
 ok(($dC['verdict']['fail'] ?? -1) === 0, 'consolidated run: no FAIL');
 [$outNo, ] = $audit('--company 1 --fy 1');
@@ -65,6 +74,21 @@ ok(abs(($c['pl_ledgers'] ?? 0) - 50.0) < 0.005, 'attribution: P&L ledgers carrie
 ok(abs(($c['appropriation'] ?? 0) - 420.0) < 0.005, 'attribution: P&L Appropriation off by 420.00 (sign of the accumulated balance reversed)');
 ok(abs(($c['difference'] ?? 0) - 470.0) < 0.005 && abs(($c['explained'] ?? 0) - 470.0) < 0.005, "attribution adds up to the whole 'Difference in Opening' (470.00)");
 ok(str_contains($out, 'equals what the OLD carry-forward formula stores'), 'the audit recognises the old formula');
+
+// ---- a journal with a ZERO GST PAID debit; a difference that two different sets of legs both explain (fixture_gst.sql) ----------------
+sh("cd " . escapeshellarg($H) . " && ./reload_db.sh gst");
+$before = $digest();
+$csvG = tempnam(sys_get_temp_dir(), 'gst') . '.csv';
+[$outG, $dG] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --csv ' . escapeshellarg($csvG));
+ok($digest() === $before, 'the audit leaves the database unchanged (gst fixture)');
+ok(($dG['verdict']['fail'] ?? -1) === 0 && abs(($dG['imbalance']['engine'] ?? 0) - 790.0) < 0.005, 'gst fixture: no FAIL, whole-ledger imbalance 790.00 Dr', json_encode($dG['imbalance'] ?? null));
+ok(preg_match('/the credit legs on CGST INPUT \+ SGST INPUT \[GST PAID A\/C debit is 0\.00\]\s+1\s+710\.00 Cr/', $outG) === 1, 'the journal with a 0.00 GST PAID debit: the two tax credits equal the difference, and the zero debit is flagged');
+ok(preg_match('/the debit legs on GST PAID A\/C\s+1\s+1,800\.00 Dr/', $outG) === 1 && str_contains($outG, '(1 group(s) fit more than one set of legs'), 'a difference that two sets of legs explain is counted once (first alternative) and the ambiguity is stated');
+$rowsG = []; if (is_file($csvG) && ($fh = fopen($csvG, 'r'))) { $head = fgetcsv($fh); while (($r = fgetcsv($fh)) !== false) { $rowsG[(int)$r[0]] = array_combine($head, $r); } fclose($fh); }
+@unlink($csvG);
+ok(preg_match('/the credit legs on CGST X\s+1\s+300\.00 Cr/', $outG) === 1 && ($rowsG[55]['group_difference_equals'] ?? '') === 'Cr CGST X 300.00', 'two identical credit lines on one account are ONE explanation, not an ambiguity', json_encode($rowsG[55] ?? null));
+ok(($rowsG[53]['group_difference_equals'] ?? '') === 'Dr GST PAID A/C 1,800.00  OR  Dr CGST X 900.00 + SGST X 900.00', 'csv: voucher 53 lists both alternatives', json_encode($rowsG[53] ?? null));
+ok(($rowsG[52]['group_difference_equals'] ?? '') === 'Cr CGST INPUT 355.00 + SGST INPUT 355.00 [the GST PAID A/C debit leg of this group is 0.00]' && ($rowsG[52]['linked_voucher_ids'] ?? '') === '51', 'csv: voucher 52 (journal linked to the sale by link type 4) - the two tax credits, zero GST PAID debit', json_encode($rowsG[52] ?? null));
 
 // ---- linked vouchers: composition-scheme purchase + its GST PAID A/C system journal (fixture_pairs.sql) ----------------------
 sh("cd " . escapeshellarg($H) . " && ./reload_db.sh pairs");
