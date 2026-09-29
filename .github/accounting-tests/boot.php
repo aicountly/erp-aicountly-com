@@ -8,7 +8,24 @@ namespace App\Libraries {
     class externaldb {
         public $session;
         public function __construct() { helper(['custom']); $this->session = \Config\Services::session(); }
-        public function __call($n, $a) { return \Config\Database::connect(); }   // every "other" DB = the test DB
+
+        /**
+         * Every "other" database is the test database - except univaictly_db(), which models the live
+         * installation: there the company and financial-year masters live in a database of their own, so
+         * this returns a SEPARATE connection whose search path starts at the "univ" schema. That schema
+         * holds a view of cmpfymastr, so a test can take the table out of the main schema and prove that
+         * the code really does look in the company database (see test_composition.php).
+         */
+        public function __call($n, $a)
+        {
+            static $univ = null;
+            if ($n !== 'univaictly_db') { return \Config\Database::connect(); }
+            if ($univ === null) {
+                $univ = \Config\Database::connect(null, false);
+                $univ->query('SET search_path TO univ, public');
+            }
+            return $univ;
+        }
     }
 }
 

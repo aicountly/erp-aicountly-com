@@ -305,6 +305,42 @@ ok($rowsOf(55) === ['103:2:10000.00', '108:1:10000.00', '117:1:300.00', '146:2:3
 ok(str_contains($g, 'voucher(s) 55'), 'and voucher 55 is reported as needing a person',
    substr($g, (int)strpos($g, 'left exactly as it is'), 400));
 
+// ---- the financial-year master lives in the separate company database, not in the ledger database -----
+// This is what made the first real run fail: cmpfymastr was read from the main connection, where a live
+// installation does not have it. The main schema's table is taken away here, leaving only the view the
+// company connection sees, so the repair must still find the year.
+$reload('pairs');
+$plannedSame = function (string $out): bool {
+    return preg_match('/ledger before\s+: debit - credit = 15,780\.00 Cr/', $out) === 1
+        && preg_match('/entries to complete\s+: 5\b/', $out) === 1;
+};
+sh($psql . ' -c ' . escapeshellarg('ALTER TABLE public.cmpfymastr RENAME TO cmpfymastr_moved_away'));
+ok($plannedSame($run('--company 1 --fy 1 --branch 1')),
+   'the year master is found in the separate company database, and the same repair is planned',
+   substr($run('--company 1 --fy 1 --branch 1'), 0, 500));
+
+sh($psql . ' -c ' . escapeshellarg('DROP VIEW univ.cmpfymastr'));
+
+// the year row exists but carries no dates: unusable, and it must not be run with an empty date
+sh($psql . ' -c ' . escapeshellarg('ALTER TABLE public.cmpfymastr_moved_away RENAME TO cmpfymastr;
+  UPDATE public.cmpfymastr SET fy_beg_date = NULL, fy_end_date = NULL WHERE cmpfymastr_id = 1'));
+$nullDates = $run('--company 1 --fy 1 --branch 1');
+ok(str_contains($nullDates, 'Could not read financial year') && !str_contains($nullDates, '1970-'),
+   'a year row with no start or end date is refused, not run over an empty period',
+   substr($nullDates, 0, 400));
+sh($psql . ' -c ' . escapeshellarg("UPDATE public.cmpfymastr SET fy_beg_date = '2025-04-01', fy_end_date = '2026-03-31' WHERE cmpfymastr_id = 1;
+  ALTER TABLE public.cmpfymastr RENAME TO cmpfymastr_moved_away"));
+
+$noFy = $run('--company 1 --fy 1 --branch 1');
+ok(str_contains($noFy, 'Could not read financial year') && str_contains($noFy, '--fy-start'),
+   'with the year master nowhere to be found it says so and offers the dates as options, not a stack trace',
+   substr($noFy, 0, 400));
+ok($plannedSame($run('--company 1 --fy 1 --branch 1 --fy-start 2025-04-01 --fy-end 2026-03-31')),
+   'and with the dates given on the command line it plans exactly the same repair');
+
+sh($psql . ' -c ' . escapeshellarg('ALTER TABLE public.cmpfymastr_moved_away RENAME TO cmpfymastr;
+  CREATE VIEW univ.cmpfymastr AS SELECT * FROM public.cmpfymastr'));
+
 // =====================================================================================================
 //  PART 3: what it must not touch
 // =====================================================================================================
