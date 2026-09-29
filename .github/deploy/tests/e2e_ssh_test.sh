@@ -18,7 +18,10 @@ bad() { echo "  FAIL: $*"; FAILN=$((FAILN+1)); }
 check() { local desc="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$desc"; else bad "$desc"; fi; }
 
 prod_hash()      { tar -C "$PROD" --sort=name -cf - . | sha256sum | cut -d' ' -f1; }
-protected_hash() { tar -C "$PROD" --sort=name -cf - .env .htaccess vendor public writable .user.ini php.ini system/.htaccess uploads 2>/dev/null | sha256sum | cut -d' ' -f1; }
+# The other projects' folders in the web root, and the unused view folder of the ERP: none may ever be touched.
+OTHER_DIRS=(aisonode app_old erp3-accounts-xml-export erp3-voucher-verification)
+UNUSED_DIR=app/Views/grpcomp
+protected_hash() { tar -C "$PROD" --sort=name -cf - .env .htaccess vendor public writable .user.ini php.ini system/.htaccess uploads "${OTHER_DIRS[@]}" "$UNUSED_DIR" 2>/dev/null | sha256sum | cut -d' ' -f1; }
 
 stop_sshd() { [ -f "$E2E/sshd/sshd.pid" ] && kill "$(cat "$E2E/sshd/sshd.pid")" 2>/dev/null; sleep 0.5; }
 created_user=0
@@ -83,6 +86,17 @@ EOF
   printf 'PROD-INI\n'      >"$PROD/php.ini"
   printf 'PROD-UPLOAD\n'   >"$PROD/uploads/customer.pdf"
   printf 'PROD-ONLY\n'     >"$PROD/app/Controllers/Prod_Only.php"
+  # The other projects that live in the same web root, and the unused group-company views (the seeding rsync
+  # above skipped app/Views/grpcomp because it is excluded, so production gets its own copy here).
+  local od
+  for od in "${OTHER_DIRS[@]}"; do
+    mkdir -p "$PROD/$od/sub"
+    printf 'PROD-OTHER\n' >"$PROD/$od/index.php"
+    printf 'PROD-OTHER\n' >"$PROD/$od/sub/only_here.php"
+  done
+  mkdir -p "$PROD/$UNUSED_DIR/reports"
+  printf 'PROD-UNUSED\n' >"$PROD/$UNUSED_DIR/index.php"
+  printf 'PROD-UNUSED\n' >"$PROD/$UNUSED_DIR/reports/only_here.php"
   chown -R deployer:deployer /home/deployer
   find "$PROD" -exec touch -d '2020-01-01 00:00:00' {} + 2>/dev/null
   chown -R deployer:deployer /home/deployer
@@ -125,6 +139,12 @@ printf 'REPO-VENDOR-CHANGED\n'   >"$E2E/repo/vendor/autoload.php"
 printf '{"changed":true}\n'      >"$(find "$E2E/repo/writable/comp1" -maxdepth 1 -type f | sort | head -n 1)"
 mkdir -p "$E2E/repo/public" && printf 'REPO-PUBLIC\n' >"$E2E/repo/public/new.css"
 printf 'REPO-INI-CHANGED\n' >"$E2E/repo/php.ini"; printf 'REPO-INI-CHANGED\n' >"$E2E/repo/.user.ini"
+# ...and plant a copy of each other-project folder in the source: none of them may reach production either
+for od in "${OTHER_DIRS[@]}"; do
+  mkdir -p "$E2E/repo/$od/sub"
+  printf 'REPO-OTHER\n' >"$E2E/repo/$od/index.php"
+  printf 'REPO-OTHER\n' >"$E2E/repo/$od/sub/deep.php"
+done
 
 H1=$(prod_hash); P1=$(protected_hash)
 run_deploy plan >"$E2E/s2plan.log" 2>&1; rc=$?
@@ -142,6 +162,10 @@ check "protected items untouched (.env .htaccess vendor public writable .user.in
 check ".env still has production content"      grep -qx PROD-ENV-SENTINEL "$PROD/.env"
 check ".htaccess still has production content" grep -qx PROD-HTACCESS-SENTINEL "$PROD/.htaccess"
 check "public/new.css was not created"         test ! -e "$PROD/public/new.css"
+for od in "${OTHER_DIRS[@]}"; do
+  check "$od: production content kept, its production-only file survives, the source's copy never arrived" \
+    bash -c "grep -qx PROD-OTHER '$PROD/$od/index.php' && grep -qx PROD-OTHER '$PROD/$od/sub/only_here.php' && test ! -e '$PROD/$od/sub/deep.php'"
+done
 check "production-only file preserved (no --delete)" grep -qx PROD-ONLY "$PROD/app/Controllers/Prod_Only.php"
 check "Dashboard.php updated"  grep -q 'deploy-test change' "$PROD/app/Controllers/Admin/Dashboard.php"
 check "Routes.php updated"     grep -q 'deploy-test change' "$PROD/app/Config/Routes.php"
@@ -160,12 +184,36 @@ check "DEPLOY-LOG.txt lists the new file as '+++++++++'" grep -q '^<f+++++++++ a
 check "DEPLOY-LOG.txt lists an overwritten file"     grep -q 'app/Config/Routes.php' "${BK}DEPLOY-LOG.txt"
 check "DEPLOY-LOG.txt contains no protected path"    bash -c "! grep -Eq '(^|/)(\.env|\.htaccess|vendor/|writable/)' '${BK}DEPLOY-LOG.txt'"
 check "backup has no protected files" bash -c "test -z \"\$(find '$BK' \\( -name '.env*' -o -name '.htaccess' -o -path '*writable*' -o -path '*vendor/autoload.php' \\) -print -quit)\""
+check "DEPLOY-LOG.txt lists none of the excluded folders" bash -c "! grep -Eq '(^| )(aisonode|app_old|erp3-accounts-xml-export|erp3-voucher-verification|app/Views/grpcomp)/' '${BK}DEPLOY-LOG.txt'"
+check "backup holds none of the excluded folders" bash -c "for d in aisonode app_old erp3-accounts-xml-export erp3-voucher-verification app/Views/grpcomp; do test ! -e '${BK}'\"\$d\" || exit 1; done"
 check "apply's own summary says '1 new, 3 changed'" grep -q 'Files uploaded: 1 new, 3 changed' "$E2E/s2apply.log"
 grep -E '^==>' "$E2E/s2apply.log" | sed 's/^/    /'
 
 echo; echo "################ S2b: idempotency after apply ################"
 run_deploy plan >"$E2E/s2b.log" 2>&1
 check "second plan lists nothing" bash -c "! grep -Eq '^([<>]f|cd|\*deleting)' '$E2E/s2b.log'"
+
+echo; echo "################ S2c: app/Views/grpcomp is not deployed, its neighbours are ################"
+# The repository's real group-company views (hundreds of files) are in the source and absent from production.
+GRP=app/Views/grpcomp/accounts/group_report.php
+check "precondition: the source holds the real group-company views" test -f "$E2E/repo/$GRP"
+check "precondition: production has none of them, only its own sentinel copy" test ! -e "$PROD/$GRP" -a -f "$PROD/$UNUSED_DIR/index.php"
+printf '\n// grpcomp-test change\n' >>"$E2E/repo/$GRP"                                          # the unused views: must NOT go
+printf '\n// grpcomp-test change\n' >>"$E2E/repo/app/Views/includes/grpcomp/inner_header.php"    # same folder name elsewhere: MUST go
+printf '\n// grpcomp-test change\n' >>"$E2E/repo/app/Views/admin/reports/trial_balance.php"      # an ordinary view: MUST go
+H7=$(prod_hash); P7=$(protected_hash)
+run_deploy plan >"$E2E/s2c.log" 2>&1; rc=$?
+check "plan exits 0" test $rc -eq 0
+check "dry run modified nothing" test "$(prod_hash)" = "$H7"
+C7=$(grep -Ec '^[<>]f' "$E2E/s2c.log")
+check "plan lists exactly the 2 ordinary views, got $C7" test "$C7" -eq 2
+check "  ...and nothing under app/Views/grpcomp" bash -c "! grep -Eq ' app/Views/grpcomp/' '$E2E/s2c.log'"
+run_deploy apply DRY_RUN=false >"$E2E/s2c-apply.log" 2>&1; rc=$?
+check "apply exits 0" test $rc -eq 0
+check "  ...the neighbouring views were updated" bash -c "grep -q 'grpcomp-test change' '$PROD/app/Views/includes/grpcomp/inner_header.php' && grep -q 'grpcomp-test change' '$PROD/app/Views/admin/reports/trial_balance.php'"
+check "  ...app/Views/grpcomp is exactly as it was (and every other protected item)" test "$(protected_hash)" = "$P7"
+check "  ...the changed unused view was not created on production" test ! -e "$PROD/$GRP"
+check "  ...production's own copy is intact" grep -qx PROD-UNUSED "$PROD/$UNUSED_DIR/index.php"
 
 echo; echo "################ S3: wrong host key (MITM) is refused before any transfer ################"
 H3=$(prod_hash)

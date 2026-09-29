@@ -37,3 +37,22 @@
 # Repository and CI internals must never land in a web-served directory.
 .git
 /.github/
+
+# --- 3. Other projects that live next to the ERP in the same web root -------
+# Separate applications and archives kept in the ERP's web root on the server.
+# Root only (leading "/"): a folder of the same name deeper in the tree would be
+# ordinary ERP code and keeps deploying. None of them is part of this repository,
+# so a deployment cannot upload them today and never deletes them; the explicit
+# rules keep it that way even if a folder of the same name is ever added to the
+# repository, or --delete were ever added to the rsync options.
+/aisonode/
+/app_old/
+/erp3-accounts-xml-export/
+/erp3-voucher-verification/
+
+# --- 4. Parts of the ERP that are not in use ---------------------------------
+# The group-company views are not used, so a deployment must neither upload
+# changes to them nor create anything in them. Only this exact path is excluded:
+# app/Controllers/Grpcomp, app/Models/Grpcomp, app/Views/includes/grpcomp, and any
+# other folder that merely has the same name, deploy as usual.
+/app/Views/grpcomp/

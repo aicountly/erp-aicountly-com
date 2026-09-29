@@ -21,6 +21,9 @@
 #
 # Safety properties (all exercised by `selftest`):
 #   * .env*, .htaccess, /vendor/, /public/, /writable/ are never transferred.
+#   * Neither are the folders of the other projects in the same web root: /aisonode/, /app_old/,
+#     /erp3-accounts-xml-export/ and /erp3-voucher-verification/ (root only).
+#   * Nor is the unused group-company view folder /app/Views/grpcomp/ (that exact path only).
 #   * rsync is never run with --delete, so files that exist only on production survive.
 #   * Files that ARE overwritten are first moved to a backup directory on the server.
 #   * An independent checker fails the run if a protected path shows up in the
@@ -60,16 +63,28 @@ required_rules=(
   '/vendor/' '/public/' '/writable/'
   '/.user.ini' '/php.ini'
   '.git' '/.github/'
+  '/aisonode/' '/app_old/' '/erp3-accounts-xml-export/' '/erp3-voucher-verification/'
+  '/app/Views/grpcomp/'
 )
+
+# The folders of other projects that share the ERP's web root on the server. One list, so that the
+# self-test below exercises exactly the names the rules protect.
+other_project_dirs=(aisonode app_old erp3-accounts-xml-export erp3-voucher-verification)
+
+# Parts of the ERP itself that are not in use and must not be deployed, as exact paths from the web root.
+unused_app_dirs=(app/Views/grpcomp)
 
 # Independent description of the protected locations (relative to the web root).
 # Used only to audit rsync's transfer list; it does not rely on rsync's exclude engine.
+# The other-project folders are matched by exact name at the root only, like /vendor/.
 protected_re=(
   '(^|/)\.env(\.[^/]*)?(/|$)'
   '(^|/)\.htaccess(/|$)'
   '(^|/)\.git(/|$)'
   '^(vendor|public|writable|\.github)(/|$)'
   '^(\.user\.ini|php\.ini)$'
+  '^(aisonode|app_old|erp3-accounts-xml-export|erp3-voucher-verification)(/|$)'
+  '^app/Views/grpcomp(/|$)'
 )
 
 verify_exclude_file() {
@@ -174,7 +189,7 @@ summarize() {
       echo
       echo "- Commit: \`${GITHUB_SHA:-local}\`"
       echo "- New files: **$new**, changed files: **$updated**, new directories: **$dirs**"
-      echo "- Protected paths (\`.env*\`, \`.htaccess\`, \`vendor\`, \`public\`, \`writable\`) verified absent from the transfer list"
+      echo "- Protected paths (\`.env*\`, \`.htaccess\`, \`vendor\`, \`public\`, \`writable\`, \`aisonode\`, \`app_old\`, \`erp3-accounts-xml-export\`, \`erp3-voucher-verification\`, \`app/Views/grpcomp\`) verified absent from the transfer list"
       echo
       echo "Files ($mode, first 200):"
       echo '```'
@@ -233,6 +248,26 @@ selftest() {
   mk "$src/php.ini" REPO-INI
   mk "$src/app/Helpers/same_helper.php" SAME               # identical on production: must not be touched
   mk "$src/app/Linked/new.php" NEW                         # production: app/Linked is a symlink to a directory
+  # Other projects' folders: not in the real repository, so a copy is planted in the source here to prove
+  # the rules stop them even if one ever appeared there ...
+  local od
+  for od in "${other_project_dirs[@]}"; do
+    mk "$src/$od/index.php" REPO-OTHER
+    mk "$src/$od/sub/deep.php" REPO-OTHER
+    # ... while a folder of the same name deeper in the tree is ordinary ERP code and MUST deploy
+    mk "$src/app/Libraries/$od/nested.php" NEW
+  done
+  # The unused group-company views: a copy is planted here so the rule is proven, and the exact scope is pinned -
+  # the views next to it, a folder of the same name elsewhere and a look-alike name are ordinary ERP code and MUST deploy.
+  local ud
+  for ud in "${unused_app_dirs[@]}"; do
+    mk "$src/$ud/index.php" REPO-UNUSED
+    mk "$src/$ud/reports/deep.php" REPO-UNUSED
+  done
+  mk "$src/app/Views/admin/list.php" NEW
+  mk "$src/app/Views/admin/grpcomp/nested.php" NEW
+  mk "$src/app/Views/includes/grpcomp/inner_header.php" NEW
+  mk "$src/app/Views/grpcomp_new/view.php" NEW
 
   # What production looks like before the deploy.
   mk "$prod/index.php" OLD
@@ -251,6 +286,14 @@ selftest() {
   mk "$prod/uploads/customer.pdf" PROD-ONLY                # unrelated production dir: must survive
   mk "$prod/app/Helpers/same_helper.php" SAME
   mk "$prod/linked_target/existing.php" PROD-ONLY
+  for od in "${other_project_dirs[@]}"; do
+    mk "$prod/$od/index.php" PROD-OTHER                    # same path as in the source: must keep its content
+    mk "$prod/$od/sub/only_here.php" PROD-OTHER            # exists only on production: must survive
+  done
+  for ud in "${unused_app_dirs[@]}"; do
+    mk "$prod/$ud/index.php" PROD-UNUSED                   # same path as in the source: must keep its content
+    mk "$prod/$ud/reports/only_here.php" PROD-UNUSED       # exists only on production: must survive
+  done
   ln -s ../linked_target "$prod/app/Linked"
   # Backdate production so an accidental rewrite (new mtime) is detectable.
   find "$prod" -exec touch -d '2020-01-01 00:00:00' {} +
@@ -260,7 +303,7 @@ selftest() {
 
   # Everything that must be byte-, mode- and mtime-identical after the deploy.
   local protected_set=(.env .htaccess system/.htaccess vendor public writable
-    .user.ini php.ini uploads app/Controllers/Prod_Only.php)
+    .user.ini php.ini uploads app/Controllers/Prod_Only.php "${other_project_dirs[@]}" "${unused_app_dirs[@]}")
   fingerprint() { tar -C "$prod" --sort=name -cf - "${protected_set[@]}" | sha256sum | cut -d' ' -f1; }
   whole_tree()  { tar -C "$prod" --sort=name -cf - . | sha256sum | cut -d' ' -f1; }
 
@@ -306,6 +349,18 @@ selftest() {
   expect_absent writable/cache
   expect_absent .git
   expect_absent .github
+  # The other projects' folders: production content kept, the source's copy never arrived.
+  for od in "${other_project_dirs[@]}"; do
+    expect_content "$od/index.php" PROD-OTHER
+    expect_content "$od/sub/only_here.php" PROD-OTHER
+    expect_absent "$od/sub/deep.php"
+  done
+  # The unused group-company views: same.
+  for ud in "${unused_app_dirs[@]}"; do
+    expect_content "$ud/index.php" PROD-UNUSED
+    expect_content "$ud/reports/only_here.php" PROD-UNUSED
+    expect_absent "$ud/reports/deep.php"
+  done
 
   # 4. Nothing that only exists on production was deleted.
   expect_content app/Controllers/Prod_Only.php PROD-ONLY
@@ -318,6 +373,18 @@ selftest() {
   expect_content app/Controllers/Foo.php NEW
   expect_content app/Controllers/Brand_New.php NEW
   expect_content app/Libraries/vendor/autoload.php NEW
+  # A folder that merely shares a name with one of the other projects' folders, deeper in the tree, is ERP code.
+  for od in "${other_project_dirs[@]}"; do
+    expect_content "app/Libraries/$od/nested.php" NEW
+    grep -q "app/Libraries/$od/nested.php" "$sandbox/plan.log" \
+      || fail "plan does not list app/Libraries/$od/nested.php (a nested folder of that name must deploy)"
+  done
+  # The exclusion of app/Views/grpcomp is exactly that path: everything around it deploys.
+  for p in app/Views/admin/list.php app/Views/admin/grpcomp/nested.php app/Views/includes/grpcomp/inner_header.php \
+    app/Views/grpcomp_new/view.php; do
+    expect_content "$p" NEW
+    grep -q "$p" "$sandbox/plan.log" || fail "plan does not list $p (only app/Views/grpcomp itself is excluded)"
+  done
   expect_mode app/Controllers/Brand_New.php 644
   expect_mode app/Libraries 755
   expect_mode app/Libraries/vendor 755
@@ -349,6 +416,9 @@ selftest() {
     -print -quit | grep -q .; then
     fail "backup contains protected files"
   fi
+  for od in "${other_project_dirs[@]}" "${unused_app_dirs[@]}"; do
+    [ ! -e "$backup/$od" ] || fail "backup contains the excluded folder $od"
+  done
 
   # 7. A second run is a no-op (checksum comparison gives a clean, meaningful diff).
   build_rsync_args plan "$backup" "$exclude_file"
@@ -373,11 +443,26 @@ selftest() {
   printf '%s\n' \
     '>f.st...... app/Controllers/Foo.php' \
     '>f+++++++++ app/Libraries/vendor/autoload.php' \
-    'cd+++++++++ app/Libraries/vendor/' >"$ok_log"
-  assert_no_protected_paths "$ok_log" 2>/dev/null || fail "plan-checker rejects legitimate paths"
+    'cd+++++++++ app/Libraries/vendor/' \
+    '>f+++++++++ app/Libraries/aisonode/nested.php' \
+    'cd+++++++++ app/Libraries/app_old/' \
+    '>f+++++++++ app_older/x.php' \
+    '>f+++++++++ aisonode2/x.php' \
+    '>f+++++++++ erp3-voucher-verification-notes.txt' \
+    '>f.st...... app/Views/admin/list.php' \
+    '>f.st...... app/Views/admin/grpcomp/nested.php' \
+    '>f.st...... app/Views/includes/grpcomp/inner_header.php' \
+    'cd+++++++++ app/Views/grpcomp_new/' \
+    '>f.st...... app/Controllers/Grpcomp/Accounts.php' >"$ok_log"
+  assert_no_protected_paths "$ok_log" 2>/dev/null \
+    || fail "plan-checker rejects legitimate paths (a nested folder of the same name, a look-alike name, or a neighbour of an excluded folder)"
   for p in '.env' '.env.production' 'x/.env' '.htaccess' 'system/.htaccess' 'vendor/autoload.php' \
     'public/logo.png' 'writable/comp1/a.json' '.git/config' '.github/workflows/x.yml' \
-    '.user.ini' 'php.ini'; do
+    '.user.ini' 'php.ini' \
+    'aisonode/' 'aisonode/server.js' 'app_old/' 'app_old/app/Config/App.php' \
+    'erp3-accounts-xml-export/' 'erp3-accounts-xml-export/export.php' \
+    'erp3-voucher-verification/' 'erp3-voucher-verification/sub/verify.php' \
+    'app/Views/grpcomp/' 'app/Views/grpcomp/index.php' 'app/Views/grpcomp/reports/deep.php'; do
     printf '>fc.T...... %s\n' "$p" >"$bad_log"
     if assert_no_protected_paths "$bad_log" 2>/dev/null; then fail "plan-checker did not flag '$p'"; fi
     printf '<fcsT...... %s\n' "$p" >"$bad_log"
@@ -385,16 +470,23 @@ selftest() {
   done
   printf '*deleting   writable/comp1/data.json\n' >"$bad_log"
   if assert_no_protected_paths "$bad_log" 2>/dev/null; then fail "plan-checker did not flag a protected deletion"; fi
+  printf '*deleting   app_old/app/Config/App.php\n' >"$bad_log"
+  if assert_no_protected_paths "$bad_log" 2>/dev/null; then fail "plan-checker did not flag a deletion inside an other-project folder"; fi
 
-  # 9. Mutation test: with the '.env' rule removed, rsync WOULD send .env;
-  #    the checker must notice (proves the second layer works independently).
-  local broken="$sandbox/broken-excludes.txt"
-  grep -vxF '.env' "$exclude_file" >"$broken"
-  build_rsync_args plan "$backup" "$broken"
-  (umask 000; rsync "${RSYNC_ARGS[@]}" "$src/" "$prod/") >"$sandbox/mutant.log" 2>&1 || true
-  if assert_no_protected_paths "$sandbox/mutant.log" 2>/dev/null; then
-    fail "mutation test: checker did not notice a broken exclude file"
-  fi
+  # 9. Mutation test: with a mandatory rule removed, rsync WOULD send the path that rule protects; the
+  #    checker must notice (proves the second layer works independently). One case for '.env' and one for
+  #    each of the other projects' folders.
+  local broken="$sandbox/broken-excludes.txt" mutated_rule mutated_rules=('.env')
+  for od in "${other_project_dirs[@]}" "${unused_app_dirs[@]}"; do mutated_rules+=("/$od/"); done
+  for mutated_rule in "${mutated_rules[@]}"; do
+    grep -vxF -- "$mutated_rule" "$exclude_file" >"$broken"
+    cmp -s "$exclude_file" "$broken" && fail "mutation test: rule '$mutated_rule' is not in the exclude file"
+    build_rsync_args plan "$backup" "$broken"
+    (umask 000; rsync "${RSYNC_ARGS[@]}" "$src/" "$prod/") >"$sandbox/mutant.log" 2>&1 || true
+    if assert_no_protected_paths "$sandbox/mutant.log" 2>/dev/null; then
+      fail "mutation test: checker did not notice the missing rule '$mutated_rule'"
+    fi
+  done
 
   if [ "$failures" -ne 0 ]; then
     die "Self-test FAILED ($failures problem(s)); nothing was sent to production"
