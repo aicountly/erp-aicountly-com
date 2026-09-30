@@ -231,6 +231,11 @@ $digest = fn() => trim(sh($psql . ' -c ' . escapeshellarg(
     "SELECT md5(string_agg(t,'|' ORDER BY t)) FROM (SELECT 'a'||md5(x::text) t FROM accttxnmst x
        UNION ALL SELECT 'b'||md5(x::text) FROM acctvchreg x UNION ALL SELECT 'c'||md5(x::text) FROM cmptxnmstn x) z")));
 $run = function (string $args) use ($H) { return sh('cd ' . escapeshellarg($H) . ' && php run_repair.php ' . $args); };
+$money = function (string $s): float {                       // "12,694.56 Cr" -> -12694.56
+    if (!preg_match('/([\d,]+\.\d\d)(?:\s+(Dr|Cr))?/', $s, $m)) { return NAN; }
+    $v = (float)str_replace(',', '', $m[1]);
+    return (($m[2] ?? 'Dr') === 'Cr') ? -$v : $v;
+};
 
 $imbPairs = $imb();
 ok(abs($imbPairs + 15780.0) < 0.005, 'fixture_pairs starts 15,780.00 Cr out of balance', (string)$imbPairs);
@@ -241,8 +246,16 @@ ok($digest() === $snapshot, 'the dry run changes nothing at all');
 ok(str_contains($dry, 'DRY RUN'), 'it says it is a dry run');
 ok(preg_match('/ledger before\s+: debit - credit = 15,780\.00 Cr/', $dry) === 1, 'it reports the ledger before');
 ok(preg_match('/ledger after\s+: debit - credit = ([\d,]+\.\d\d Cr|0\.00)/', $dry) === 1, 'it measures the ledger after for real, then rolls back');
-ok(preg_match('/by rule:/', $dry) === 1 && preg_match('/\bM\b\s+7 row\(s\)/', $dry) === 1 && preg_match('/\bS\b\s+2 row\(s\)/', $dry) === 1,
+ok(preg_match('/by rule, and what each closes/', $dry) === 1 && preg_match('/\bM\b\s+7 row\(s\)/', $dry) === 1 && preg_match('/\bS\b\s+2 row\(s\)/', $dry) === 1,
    'it groups the changes by the rule that justifies them', substr($dry, (int)strpos($dry, 'by rule'), 400));
+// Each rule's column is the effect on the ledger, not the size of the rows written: a correction from
+// 7,323.75 to 7,323.76 writes 7,323.76 and closes a paisa. Added up they must be step 2's first line.
+preg_match_all('/^\s+[A-Z]\s+\d+ row\(s\)\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/m', $dry, $rules);
+preg_match('/^\s+\d+ row\(s\)\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/m', $dry, $rtot);
+$sumRules = 0.0;
+foreach ($rules[1] as $one) { $sumRules += $money($one); }
+ok(count($rules[1]) >= 2 && count($rtot) === 2 && abs($sumRules - $money($rtot[1])) < 0.005,
+   'the per-rule column adds up to the total printed under it', json_encode([$rules[1] ?? null, $rtot[1] ?? null]));
 ok(!str_contains($dry, 'remove  voucher'), 'it removes no ledger row on this ledger: everything is a correction or an addition',
    substr($dry, (int)strpos($dry, 'the changes'), 600));
 ok(preg_match('/change\s+voucher 24\s+Dr\s+9,000\.00\s+GST PAID A\/C\s+\(was Dr 4,500\.00\)\s+\[S\]/', $dry) === 1,
@@ -392,11 +405,6 @@ ok($plan['actions'] === [], 'a freight bill-sundry leg is not treated as tax and
 //  ledger's, what the stored rows account for, what is left, and what the Balance Sheet then reads.
 // =====================================================================================================
 $reload('pairs');
-$money = function (string $s): float {                       // "12,694.56 Cr" -> -12694.56
-    if (!preg_match('/([\d,]+\.\d\d)(?:\s+(Dr|Cr))?/', $s, $m)) { return NAN; }
-    $v = (float)str_replace(',', '', $m[1]);
-    return (($m[2] ?? 'Dr') === 'Cr') ? -$v : $v;
-};
 $bsLine = '/Balance Sheet\s+liabilities\s+([\d,]+\.\d\d)\s+assets\s+([\d,]+\.\d\d)\s+difference\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/';
 
 $snapshot = $digest();

@@ -373,17 +373,23 @@ class RepairComposition extends BaseCommand
             'S' => 'GST PAID A/C debited with the tax the voucher\'s own GST summary records',
             'R' => 'rounding between a tax total and its components',
         ];
+        // "closes" is the effect on the ledger, not the size of the row written: correcting a leg from 7,323.75
+        // to 7,323.76 writes 7,323.76 but closes one paisa, and a mirror on the credit side closes a negative
+        // amount. Added up, this column is the first line of step 2 of the reconciliation.
         $by = [];
         foreach ($actions as $a) {
             $r = $a['rule'];
             $by[$r]['rows'] = ($by[$r]['rows'] ?? 0) + 1;
-            $by[$r]['amt']  = ($by[$r]['amt'] ?? 0) + (float)$a['amount'];
+            $by[$r]['net']  = ($by[$r]['net'] ?? 0) - (float)($a['delta'] ?? 0.0);
         }
         ksort($by);
-        CLI::write('  by rule:');
+        $net = 0.0;
+        CLI::write('  by rule, and what each closes of the difference:');
         foreach ($by as $r => $x) {
-            CLI::write(sprintf('         %s  %5d row(s)  %16s   %s', $r, $x['rows'], $this->n($x['amt']), $names[$r] ?? ''));
+            $net += $x['net'];
+            CLI::write(sprintf('         %s  %5d row(s)  %18s   %s', $r, $x['rows'], $this->drcr(round($x['net'], 2)), $names[$r] ?? ''));
         }
+        CLI::write(sprintf('         %s  %5d row(s)  %18s', ' ', count($actions), $this->drcr(round($net, 2))));
         CLI::newLine();
     }
 
