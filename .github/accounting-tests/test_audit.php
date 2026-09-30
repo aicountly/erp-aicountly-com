@@ -165,16 +165,26 @@ ok(preg_match('/series name: PURCHASE-MAIN/', $outC) === 1, 'the voucher detail 
    substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
 ok(preg_match('/narration: Composition purchase from ABC Suppliers$/m', $outC) === 1,
    'and its narration, with the markup and the runs of spaces taken out', substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
-ok(preg_match('/register entries \(acctvchreg\): type 3 x2, type 7 x1/', $outC) === 1,
-   'and which registers it was written to', substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
+ok(preg_match('/register \(acctvchreg\), 3 row\(s\):/', $outC) === 1
+   && preg_match('/type 3\s+Dr\s+50,000\.00\s+Cr\s+0\.00\s+Purchases/', $outC) === 1
+   && preg_match('/register total: debit 50,000\.00\s+credit 118,000\.00\s+difference 68,000\.00 Cr/', $outC) === 1,
+   'the register rows are listed in full and totalled', substr($outC, (int)strpos($outC, 'voucher 23 '), 700));
+ok(!str_contains(substr($outC, (int)strpos($outC, 'voucher 23 ')), 'no ledger row in this voucher'),
+   'voucher 23: every register account has a ledger row, so nothing is flagged');
+[$outE, $dE] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 25');
+ok(preg_match('/accounts in the register that have no ledger row in this voucher: CGST INPUT A\/C \(acc 141\)/', $outE) === 1,
+   'an account the register carries but the ledger never got is named: that is the leg that went missing',
+   substr($outE, (int)strpos($outE, 'voucher 25 '), 700));
+ok(($dE['voucher_detail'][0]['register_only_accounts'][0] ?? '') === 'CGST INPUT A/C (acc 141)', 'and it is in the JSON',
+   json_encode($dE['voucher_detail'][0]['register_only_accounts'] ?? null));
 ok(($dC['voucher_detail'][0]['series_name'] ?? '') === 'PURCHASE-MAIN'
    && str_contains((string)($dC['voucher_detail'][0]['narration'] ?? ''), 'ABC Suppliers')
-   && count($dC['voucher_detail'][0]['register'] ?? []) === 2, 'the same three are in the JSON', json_encode($dC['voucher_detail'][0] ?? null));
-sh($psql . " -c " . escapeshellarg("DROP TABLE vchseriesn, vchlongnar"));
+   && count($dC['voucher_detail'][0]['register'] ?? []) === 3, 'the same three are in the JSON', json_encode($dC['voucher_detail'][0] ?? null));
+sh($psql . " -c " . escapeshellarg("DROP TABLE vchseriesn, vchlongnar, acctvchreg"));
 [$outD, $dD] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 23');
 ok(($dD['verdict']['fail'] ?? -1) === 0 && preg_match('/voucher 23 /', $outD) === 1
-   && !str_contains($outD, 'series name:') && !str_contains($outD, 'narration:'),
-   'with those two tables absent the voucher is still shown and nothing fails', substr($outD, (int)strpos($outD, 'voucher 23 '), 300));
+   && !str_contains($outD, 'series name:') && !str_contains($outD, 'narration:') && !str_contains($outD, 'register ('),
+   'with those three tables absent the voucher is still shown and nothing fails', substr($outD, (int)strpos($outD, 'voucher 23 '), 300));
 
 // optional tables missing (an older database, a different build): rows still shown, nothing fails
 sh($psql . " -c " . escapeshellarg("DROP TABLE vchgstsumn, gstrinwsup, itemtxnmst"));

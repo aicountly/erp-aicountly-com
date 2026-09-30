@@ -904,15 +904,34 @@ class AuditBooks extends BaseCommand
             CLI::write('         narration: ' . mb_substr($text, 0, 200) . (mb_strlen($text) > 200 ? ' ...' : ''));
             $rec['narration'] = $text;
         }
-        $reg = $this->optional(fn() => $this->db->query('SELECT acct_vch_type t, COUNT(*) n FROM acctvchreg WHERE cmp_id = ? AND vch_txn_id = ? GROUP BY acct_vch_type ORDER BY 1',
-            [$this->cmp, $id])->getResultArray());
-        if ($reg) {
-            $parts = [];
-            foreach ($reg as $r) { $parts[] = 'type ' . $r['t'] . ' x' . $r['n']; }
-            CLI::write('         register entries (acctvchreg): ' . implode(', ', $parts));
-            $rec['register'] = $reg;
-        }
         $rec['rows'] = $this->printRows($id);
+        // The register is written beside the ledger from the same entry. When it carries an account the ledger
+        // does not, it is the only record of the leg that never reached accttxnmst, so the rows are listed in
+        // full and compared with the ledger rather than merely counted.
+        $reg = $this->optional(fn() => $this->db->query(
+            'SELECT r.acct_vch_type t, r.acc_id, m.acc_name, COALESCE(r.acc_txn_dr_amt,0) dr, COALESCE(r.acc_txn_cr_amt,0) cr, r.acc_txn_type at
+               FROM acctvchreg r LEFT JOIN acctmaster m ON m.acc_id = r.acc_id AND m.cmp_id = r.cmp_id
+              WHERE r.cmp_id = ? AND r.vch_txn_id = ? ORDER BY r.acct_vch_type, r.acc_id', [$this->cmp, $id])->getResultArray());
+        if ($reg) {
+            $rdr = $rcr = 0.0;
+            CLI::write('         register (acctvchreg), ' . count($reg) . ' row(s):');
+            foreach (array_slice($reg, 0, 12) as $r) {
+                $rdr += (float)$r['dr']; $rcr += (float)$r['cr'];
+                CLI::write(sprintf('            type %-3s Dr %14s  Cr %14s   %s (acc %s)', $r['t'], $this->n((float)$r['dr']), $this->n((float)$r['cr']),
+                    trim((string)($r['acc_name'] ?? '(no account master row)')), $r['acc_id']));
+            }
+            if (count($reg) > 12) { CLI::write('            ... and ' . (count($reg) - 12) . ' more'); }
+            CLI::write(sprintf('            register total: debit %s   credit %s   difference %s', $this->n($rdr), $this->n($rcr), $this->drcr(round($rdr - $rcr, 2))), 'light_gray');
+            $rec['register'] = $reg;
+            $inLedger = [];
+            foreach ($rec['rows'] ?? [] as $r) { $inLedger[(int)$r['acc_id']] = true; }
+            $only = [];
+            foreach ($reg as $r) { if (!isset($inLedger[(int)$r['acc_id']])) { $only[] = trim((string)($r['acc_name'] ?? '')) . ' (acc ' . $r['acc_id'] . ')'; } }
+            if ($only) {
+                CLI::write('            accounts in the register that have no ledger row in this voucher: ' . implode(', ', array_unique($only)), 'yellow');
+                $rec['register_only_accounts'] = array_values(array_unique($only));
+            }
+        }
         $bill = $this->optional(fn() => $this->db->query('SELECT inwsup_bill_ref_no b FROM gstrinwsup WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 1', [$this->cmp, $id])->getRowArray());
         if ($bill && (string)($bill['b'] ?? '') !== '') { CLI::write('         supplier bill no: ' . $bill['b']); $rec['bill_no'] = $bill['b']; }
         $st = $this->optional(fn() => $this->db->query('SELECT COUNT(*) n, COALESCE(SUM(itm_txn_amt),0) amt FROM itemtxnmst WHERE cmp_id = ? AND vch_txn_id = ? AND itm_txn_type = 1', [$this->cmp, $id])->getRowArray());
