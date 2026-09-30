@@ -87,3 +87,8 @@ INSERT INTO itemtxnmst (cmp_id, hobo_id, vch_txn_id, itm_id_unit_id, itm_txn_qty
 
 -- the branch is registered under the composition scheme (hobo_gstin_type 2)
 INSERT INTO hobogstinm (cmp_id, hobo_id, hobo_gstin_type) VALUES (1, 1, 2);
+
+-- where a voucher came from: series name, narration, register entries (read by audit:books --voucher)
+INSERT INTO vchseriesn (vch_series_id,cmp_id,vch_type_id,vch_series_name) VALUES (3,1,11,'PURCHASE-MAIN');
+INSERT INTO vchlongnar (cmp_id,vch_txn_id,vch_long_narr) VALUES (1,23,'  Composition   purchase <b>from</b> ABC Suppliers  ');
+INSERT INTO acctvchreg (acct_vch_type,cmp_id,vch_txn_id,vch_date,acc_id,hobo_id) VALUES (3,1,23,'2025-09-10',103,1),(3,1,23,'2025-09-10',108,1),(7,1,23,'2025-09-10',103,1);

@@ -1,6 +1,6 @@
 -- SANDBOX-ONLY schema for exercising the report code. Column names are taken from the
 -- application's own queries/inserts; production DDL is not in the repository.
-DROP TABLE IF EXISTS hobogstinm, itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst, billsundry, cmptxnmstn, acctvchreg CASCADE;
+DROP TABLE IF EXISTS vchseriesn, vchlongnar, hobogstinm, itmoppyval, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn, cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst, vchbridgen, vchgstsumn, gstrinwsup, itemtxnmst, billsundry, cmptxnmstn, acctvchreg CASCADE;
 
 CREATE TABLE cmpfymastr (
   cmpfymastr_id serial PRIMARY KEY, cmp_id int, fy_beg_date date, fy_end_date date,
@@ -71,6 +71,14 @@ CREATE TABLE hobogstinm (cmp_id int, hobo_id int, hobo_gstin_type int);
 CREATE TABLE billsundry (bsd_id int PRIMARY KEY, bsd_name text, bsd_type int, bsd_input_output int, tax_cat_type int, tax_cat_sub_type int);
 -- the composition-transaction row every ledger row points at, and the voucher register (a listing table)
 CREATE TABLE cmptxnmstn (txn_id serial PRIMARY KEY, cmp_id int, vch_series_id int, vch_txn_id int, master_id int, master_id_type text);
+CREATE TABLE vchseriesn (
+  vch_series_id bigserial PRIMARY KEY, cmp_id int, vch_type_id int, vch_series_name text
+);
+
+CREATE TABLE vchlongnar (
+  vch_long_nar_id bigserial PRIMARY KEY, cmp_id int, vch_txn_id int, vch_long_narr text
+);
+
 CREATE TABLE acctvchreg (
   acct_vch_reg_id bigserial PRIMARY KEY, acct_vch_type int, cmp_id int, vch_txn_id int, txn_id int NULL,
   vch_date date, acc_id int, acc_txn_dr_amt numeric(18,2) DEFAULT 0, acc_txn_cr_amt numeric(18,2) DEFAULT 0,
