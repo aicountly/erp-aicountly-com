@@ -152,10 +152,14 @@ class CarryOpeningStock extends BaseCommand
         CLI::write('  opening quantities match the previous closing, item by item: ' . ($qtyOk ? 'yes' : 'NO'),
             $qtyOk ? 'green' : 'yellow');
         CLI::newLine();
-        CLI::write('  What this does to the rest of the reports:');
-        CLI::write('    - Profit & Loss: opening stock becomes ' . $this->n($after['total']) . ' instead of ' . $this->n($current['total'])
-            . ', and the closing stock is revalued off it');
-        CLI::write("    - Balance Sheet: 'Difference in Opening' loses the stock part of its gap");
+        if (abs(round($after['total'] - $current['total'], 2)) < self::TOLERANCE) {
+            CLI::write('  The opening stock itself does not move; only the rows holding it change.');
+        } else {
+            CLI::write('  What this does to the rest of the reports:');
+            CLI::write('    - Profit & Loss: opening stock becomes ' . $this->n($after['total']) . ' instead of '
+                . $this->n($current['total']) . ', and the closing stock is revalued off it');
+            CLI::write("    - Balance Sheet: 'Difference in Opening' loses the stock part of its gap");
+        }
         CLI::write('    Run `php spark audit:books --company ' . $this->cmp . ' --fy ' . $this->fy . ' --branch ' . $this->bo
             . '` afterwards to see both.');
 
