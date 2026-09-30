@@ -8,6 +8,10 @@
 --   ITEM-B_1   no rows at all                                      -> must be inserted
 --   ITEM-C_1   quantity 12, value AVG 999.00                       -> FY 1 did not close with it: left alone, warned
 --   ITEM-D_1   quantity row 0, value rows AVG 0 / LIFO 500.00      -> the LIFO row must be cleared, or it is counted twice
+--   ITEM-F_1   quantity 4, value row '3' (not 'AVG') 800.00         -> the same method said the other way: put right, not duplicated
+--
+-- itm_val_method_id holds the method's NAME here, as the item screens write it; a row holding 1/2/3 means
+-- the same thing and the reports, which sum every row without filtering, cannot tell them apart.
 
 TRUNCATE itmoppyval, itmoppybal, cmpfymastr, hobomaster, cmpmastern RESTART IDENTITY;
 INSERT INTO cmpfymastr (cmp_id, fy_beg_date, fy_end_date, def_val_method, is_imported) VALUES
@@ -19,10 +23,12 @@ INSERT INTO cmpmastern (cmp_id, cmp_name) VALUES (1,'Test Co');
 INSERT INTO itmoppybal (cmp_id,cmpfymastr_id,hobo_id,itm_id_unit_id,itm_op_bal_qty,itm_py_bal_qty,mat_cent_id) VALUES
  (1,2,1,'ITEM-A_1',0,0,NULL),
  (1,2,1,'ITEM-C_1',12,0,NULL),
- (1,2,1,'ITEM-D_1',0,0,NULL);
+ (1,2,1,'ITEM-D_1',0,0,NULL),
+ (1,2,1,'ITEM-F_1',4,0,NULL);
 INSERT INTO itmoppyval (cmp_id,cmpfymastr_id,hobo_id,itm_id_unit_id,itm_op_val_amt,itm_py_val_amt,itm_val_method_id,mat_cent_id) VALUES
- (1,2,1,'ITEM-A_1',0,0,3,NULL),
- (1,2,1,'ITEM-A_1',0,0,1,NULL),
- (1,2,1,'ITEM-C_1',999.00,0,3,NULL),
- (1,2,1,'ITEM-D_1',0,0,3,NULL),
- (1,2,1,'ITEM-D_1',500.00,0,2,NULL);
+ (1,2,1,'ITEM-A_1',0,0,'AVG',NULL),
+ (1,2,1,'ITEM-A_1',0,0,'FIFO',NULL),
+ (1,2,1,'ITEM-C_1',999.00,0,'AVG',NULL),
+ (1,2,1,'ITEM-D_1',0,0,'AVG',NULL),
+ (1,2,1,'ITEM-D_1',500.00,0,'2',NULL),        -- LIFO written the other way: still a different method from AVG
+ (1,2,1,'ITEM-F_1',800.00,0,'3',NULL);

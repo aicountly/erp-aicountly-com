@@ -48,7 +48,7 @@ CREATE INDEX ON undercrsmt (cmp_id, cmpfymastr_id, crs_mst_type, crs_mst_id);
 
 CREATE TABLE itmoppyval (
   cmp_id int, cmpfymastr_id int, hobo_id int, itm_id_unit_id text, itm_op_val_amt numeric(18,2),
-  itm_py_val_amt numeric(18,2) DEFAULT 0, itm_val_method_id int, mat_cent_id int
+  itm_py_val_amt numeric(18,2) DEFAULT 0, itm_val_method_id text, mat_cent_id int
 );
 
 -- the opening QUANTITY lives in its own table; the opening VALUE is in itmoppyval above, and the
