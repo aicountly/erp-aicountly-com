@@ -386,5 +386,105 @@ ok(!in_array(149, $fresh->taxAccounts(), true) && in_array(141, $fresh->taxAccou
 $plan = $fresh->plan([62]);
 ok($plan['actions'] === [], 'a freight bill-sundry leg is not treated as tax and is never mirrored', json_encode($plan['actions']));
 
+// =====================================================================================================
+//  PART 4: the Balance Sheet reconciliation
+//  It must tie the two totals on the screen to the vouchers behind them: the report's own difference, the
+//  ledger's, what the stored rows account for, what is left, and what the Balance Sheet then reads.
+// =====================================================================================================
+$reload('pairs');
+$money = function (string $s): float {                       // "12,694.56 Cr" -> -12694.56
+    if (!preg_match('/([\d,]+\.\d\d)(?:\s+(Dr|Cr))?/', $s, $m)) { return NAN; }
+    $v = (float)str_replace(',', '', $m[1]);
+    return (($m[2] ?? 'Dr') === 'Cr') ? -$v : $v;
+};
+$bsLine = '/Balance Sheet\s+liabilities\s+([\d,]+\.\d\d)\s+assets\s+([\d,]+\.\d\d)\s+difference\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/';
+
+$snapshot = $digest();
+$dry = $run('--company 1 --fy 1 --branch 1');
+$sect = substr($dry, (int)strpos($dry, 'BALANCE SHEET RECONCILIATION'));
+ok($digest() === $snapshot, 'the reconciliation reads the reports inside the transaction and still changes nothing');
+ok(str_contains($dry, 'BALANCE SHEET RECONCILIATION'), 'the dry run reconciles the Balance Sheet', substr($dry, -400));
+
+// ---- step 1: the report's difference must be the ledger's own -------------------------------------
+preg_match_all($bsLine, $sect, $bs, PREG_SET_ORDER);
+preg_match('/Ledger\s+debit minus credit of every posted row\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/', $sect, $led);
+ok(count($bs) === 2 && count($led) === 2, 'it prints the Balance Sheet totals before and after, and the ledger difference', $sect);
+$before = $money($led[1] ?? '0');
+ok(abs(((float)str_replace(',', '', $bs[0][1]) - (float)str_replace(',', '', $bs[0][2])) + $before) < 0.02,
+   'liabilities minus assets is the ledger difference seen from the other side', ($bs[0][1] ?? '') . ' - ' . ($bs[0][2] ?? '') . ' vs ' . ($led[1] ?? ''));
+ok(($bs[0][3] ?? 'x') === ($led[1] ?? 'y'), 'and the two are printed as the same figure', ($bs[0][3] ?? '') . ' vs ' . ($led[1] ?? ''));
+ok(str_contains($sect, 'Both are the same figure') && str_contains($sect, 'not a reporting one and not an accounting difference'),
+   'so it states that the report adds up and the ledger is what does not');
+ok(preg_match('/ledger before\s+: debit - credit = ' . preg_quote($led[1], '/') . '/', $dry) === 1,
+   'the figure it reconciles is the same one the command measured at the start', $led[1]);
+
+// ---- step 2: the split must add back up exactly ----------------------------------------------------
+preg_match('/entr(?:y|ies) whose own rows show which leg is missing \(the posting defect\)\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/', $sect, $p1);
+preg_match('/entry group\(s\) whose rows do not show it, for a person to decide\s+([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?)/', $sect, $p2);
+ok(count($p1) === 2 && count($p2) === 2, 'it splits the difference into what the rows explain and what needs a person', $sect);
+ok(abs(($money($p1[1]) + $money($p2[1])) - $before) < 0.005, 'the two parts add up to the whole difference, to the paisa',
+   $p1[1] . ' + ' . $p2[1] . ' vs ' . $led[1]);
+ok(str_contains($sect, 'exactly the difference in step 1'), 'and it says so only when they do');
+ok($money($p2[1]) === $money((string)(preg_match('/ledger after\s+: debit - credit = ([\d,]+\.\d\d(?:\s+Dr|\s+Cr)?|0\.00)/', $dry, $la) ? $la[1] : 'x')),
+   'the part needing a person is exactly what the measured repair leaves behind', ($p2[1] ?? '') . ' vs ' . ($la[1] ?? ''));
+
+// ---- step 3: the Balance Sheet as it would then read -----------------------------------------------
+ok(($bs[1][1] ?? '') !== ($bs[0][1] ?? '') || ($bs[1][2] ?? '') !== ($bs[0][2] ?? ''),
+   'the "after" figures are read again inside the transaction, not a cached copy of the "before" ones',
+   json_encode([$bs[0] ?? null, $bs[1] ?? null]));
+ok(abs(((float)str_replace(',', '', $bs[1][1]) - (float)str_replace(',', '', $bs[1][2])) + $money($p2[1])) < 0.02,
+   'what the Balance Sheet would then be out by is exactly what was left for a person', json_encode($bs[1]));
+ok(preg_match('/Profit \/ Loss\s+(-?[\d,]+\.\d\d)\s+\(it reads (-?[\d,]+\.\d\d) today\)/', $sect, $pl) === 1 && $pl[1] !== $pl[2],
+   'it shows what the profit would become next to what it reads today', $sect);
+ok(str_contains($sect, 'no figure here was adjusted and no balancing entry was invented'), 'and it says nothing was forced');
+ok(!str_contains($sect, 'The Balance Sheet tallies') && str_contains($sect, 'has to be looked at before anyone calls it a genuine difference'),
+   'while something is still left it does not claim the Balance Sheet tallies', $sect);
+
+// ---- the read is fenced: if the reports cannot be built, the repair still does its job --------------
+// PostgreSQL aborts a whole transaction when one statement fails, so an unreadable report would take the
+// repair down with it. Here the real stock model is put back, which needs item tables the sandbox has not got.
+$reload('pairs');
+$noRep = sh('cd ' . escapeshellarg($H) . ' && REPAIR_NO_STOCK_STUB=1 php run_repair.php --company 1 --fy 1 --branch 1 --apply');
+ok(str_contains($noRep, 'APPLIED and committed'), 'with the reports unreadable the repair still applies and commits', substr($noRep, -500));
+ok(str_contains($noRep, 'could not be built from here'), 'and it says the Balance Sheet could not be read instead of inventing figures');
+ok(abs($imb() + 1480.0) < 0.005, 'the ledger really was repaired in that run', (string)$imb());
+
+// ---- the two sides of step 1 are compared, not assumed equal -----------------------------------------
+// Data alone cannot produce a report that disagrees with its own ledger, so the comparison itself is tested.
+$agrees = new ReflectionMethod(\App\Commands\RepairComposition::class, 'reportAgreesWithLedger');
+$agrees->setAccessible(true);
+$cmd = new \App\Commands\RepairComposition(\Config\Services::logger(), \Config\Services::commands());
+ok($agrees->invoke($cmd, 474774.94, -474774.94) === true, 'a Balance Sheet that shows exactly the ledger difference agrees');
+ok($agrees->invoke($cmd, 474774.94, -474774.93) === true, 'a paisa of rounding still agrees');
+ok($agrees->invoke($cmd, 474774.94, -474774.90) === false, 'four paisa do not: that part would be the report\'s own doing');
+ok($agrees->invoke($cmd, 474774.94, -474674.94) === false, 'and a hundred rupees certainly do not');
+ok($agrees->invoke($cmd, 0.0, 0.0) === true, 'books that balance agree with a Balance Sheet that tallies');
+
+// ---- when everything is explainable, it says the Balance Sheet tallies --------------------------------
+$reload('pairs');
+sh($psql . ' -c ' . escapeshellarg(
+    'DELETE FROM accttxnmst WHERE vch_txn_id IN (27,29,30,33,38,39); DELETE FROM vchtxnconso WHERE vch_txn_id IN (27,29,30,33,38,39)'));
+$clean = $run('--company 1 --fy 1 --branch 1');
+ok(str_contains($clean, 'The Balance Sheet tallies'), 'with nothing left for a person it says the Balance Sheet tallies',
+   substr($clean, (int)strpos($clean, 'BALANCE SHEET RECON')));
+ok(!str_contains($clean, 'has to be looked at before anyone calls it a genuine difference'),
+   'and it does not then talk about a difference to look at');
+
+// ---- if applying the plan does not move the ledger by what the rules planned, it refuses to stand behind it
+// A trigger quietly adds a rupee to every row the repair inserts, so the plan and the effect part company.
+$reload('pairs');
+sh($psql . ' -c ' . escapeshellarg(
+    "CREATE FUNCTION nudge() RETURNS trigger AS \$\$ BEGIN NEW.acc_txn_amt := NEW.acc_txn_amt + 1; RETURN NEW; END \$\$ LANGUAGE plpgsql;
+     CREATE TRIGGER nudge_ins BEFORE INSERT ON accttxnmst FOR EACH ROW EXECUTE FUNCTION nudge()"));
+$nudged = $run('--company 1 --fy 1 --branch 1');
+ok(str_contains($nudged, 'DOES NOT match step 1 - do not act on this run'),
+   'when the ledger does not move by the planned amount the tie-out says so', substr($nudged, (int)strpos($nudged, 'BALANCE SHEET RECON')));
+ok(str_contains($nudged, '[WARN] completing those entries moved the ledger by'),
+   'and it names both figures instead of hiding the gap');
+sh($psql . ' -c ' . escapeshellarg('DROP TRIGGER nudge_ins ON accttxnmst; DROP FUNCTION nudge()'));
+$unnudged = $run('--company 1 --fy 1 --branch 1');
+ok(!str_contains($unnudged, 'DOES NOT match') && !str_contains($unnudged, '[WARN] completing those entries'),
+   'with the interference gone the same books tie out again', substr($unnudged, (int)strpos($unnudged, 'BALANCE SHEET RECON')));
+
 echo "\nchecks passed: $pass | failed: $fail\n";
 exit($fail ? 1 : 0);
