@@ -251,11 +251,13 @@ class CarryOpenings extends BaseCommand
     /** Every ledger whose opening differs from the previous closing, so the reader can see what was not named. */
     private function showDiffering($pSnap, $snap, array $named): void
     {
-        $rows = [];
+        $appId = $this->appropriationId();
+        $rows  = [];
         foreach (array_unique(array_merge(array_keys($pSnap->accounts), array_keys($snap->accounts))) as $id) {
             $pa = $pSnap->accounts[$id] ?? null; $ca = $snap->accounts[$id] ?? null;
             $cat = (int)($pa['cat'] ?? $ca['cat'] ?? 0);
             if (\App\Libraries\AccountingEngine::isPlCat($cat)) { continue; }   // these start every year at zero
+            if ($id === $appId) { continue; }   // its opening is not the previous closing; it gets its own line
             $close = $pa ? round((float)$pa['closing'], 2) : 0.0;
             $open  = $ca ? round((float)$ca['op'], 2) : 0.0;
             if (abs($close - $open) < self::TOLERANCE) { continue; }
@@ -295,7 +297,8 @@ class CarryOpenings extends BaseCommand
             . '; the previous year closed it at ' . $this->drcr($pClose) . ' and made ' . $this->drcr(-$pProfit) . ',');
         CLI::write('         so carrying both would put it at ' . $this->drcr($expected)
             . (abs($open - $expected) < self::TOLERANCE ? ' - which is what it holds.'
-               : '. Pass --appropriation ' . $this->n(abs($expected)) . ($expected < 0 ? 'Cr' : 'Dr') . ' to set it.'));
+               : '. Pass --appropriation ' . number_format(abs($expected), 2, '.', '')
+                 . ($expected < 0 ? 'Cr' : 'Dr') . ' to set it.'));
         CLI::newLine();
     }
 
