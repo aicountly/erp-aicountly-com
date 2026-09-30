@@ -1,6 +1,7 @@
 <?php namespace App\Commands;
 
 use App\Libraries\CompositionPosting;
+use App\Models\Admin\ReportingModel;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Database;
@@ -24,6 +25,15 @@ use Config\Database;
  * The dry run measures the result for real: it applies the plan inside a transaction, reads the ledger
  * back, prints what the reports would show, and then rolls everything back. With --apply the same work
  * is committed - but only if the verification passes; otherwise it rolls back and says so.
+ *
+ * Either way it ends with a BALANCE SHEET RECONCILIATION that ties the two totals on the screen to the
+ * vouchers behind them:
+ *   1  the Balance Sheet's own difference against the ledger's debit-minus-credit. Equal means the report
+ *      adds up and the ledger is what is wrong; a gap between them is the report's doing and is named as such.
+ *   2  that difference split into the part the vouchers' own rows account for and the part that needs a
+ *      person - the first from the plan, the second measured - and the two added back up against step 1.
+ *   3  what the Balance Sheet reads once the first part is completed, taken from the real reports inside
+ *      the transaction. What is left there is the only difference the stored data cannot explain.
  *
  * TAKE A DATABASE BACKUP BEFORE USING --apply.
  */
@@ -109,7 +119,10 @@ class RepairComposition extends BaseCommand
 
         if ($this->opt('csv') !== null) { $this->writeCsv((string)$this->opt('csv'), $plan); }
 
+        $bsBefore = $this->bsTotals($fyRow, $from, $to);
+
         if (!$plan['actions']) {
+            $this->reconciliation($bsBefore, null, $before, $before, $plan);
             CLI::write('  Nothing to change.' . ($plan['review'] ? ' Every remaining difference needs a person to decide.' : ''), 'green');
             return 0;
         }
@@ -118,10 +131,11 @@ class RepairComposition extends BaseCommand
         //  measure the result for real, then keep it or roll it back
         // --------------------------------------------------------------------------------------------
         $this->db->transBegin();
-        $counts = $posting->apply($plan['actions']);
-        $after  = $posting->imbalance($from, $to, $this->bo);
-        $left   = $posting->unbalanced($ids);
-        $ok     = (count($left) === count($plan['review']));
+        $counts  = $posting->apply($plan['actions']);
+        $after   = $posting->imbalance($from, $to, $this->bo);
+        $left    = $posting->unbalanced($ids);
+        $ok      = (count($left) === count($plan['review']));
+        $bsAfter = $this->bsTotals($fyRow, $from, $to, true);
 
         $this->heading('RESULT');
         CLI::write('  rows inserted / updated / deleted : ' . $counts['inserted'] . ' / ' . $counts['updated'] . ' / ' . $counts['deleted']);
@@ -134,6 +148,8 @@ class RepairComposition extends BaseCommand
                 CLI::write('    voucher(s) ' . implode(' + ', $g['group']) . '  difference ' . $this->drcr($g['difference']), 'yellow');
             }
         }
+
+        $this->reconciliation($bsBefore, $bsAfter, $before, $after, $plan);
 
         if (!$apply) {
             $this->db->transRollback();
@@ -193,6 +209,154 @@ class RepairComposition extends BaseCommand
             try { $u = (new \App\Libraries\externaldb())->univaictly_db(); } catch (\Throwable $e) { $u = false; }
         }
         return $u ?: null;
+    }
+
+    // ==================================================================================================
+    //  balance sheet reconciliation
+    // ==================================================================================================
+
+    /**
+     * The Balance Sheet totals, read through the same model the page uses, so the figures are the ones on the
+     * screen and not a second calculation of my own. Returns null when the reports cannot be built from here;
+     * the repair itself does not depend on them.
+     *
+     * In PostgreSQL one failed statement aborts the whole transaction, and every statement after it fails too.
+     * The reports read many tables this command does not need, so inside the transaction the read is fenced with
+     * a savepoint: if anything in the reporting stack fails, only the read is undone and the repair - which is
+     * the part that matters - still commits or rolls back on its own terms.
+     *
+     * @param array{fy_beg_date: string, fy_end_date: string} $fyRow
+     * @return array{liab: float, asset: float, pl: float}|null
+     */
+    private function bsTotals(array $fyRow, string $from, string $to, bool $inTransaction = false): ?array
+    {
+        if ($inTransaction) { $this->db->simpleQuery('SAVEPOINT bs_reconciliation'); }
+        $out = $this->readBsTotals($fyRow, $from, $to);
+        if ($inTransaction) {
+            $this->db->simpleQuery($out === null ? 'ROLLBACK TO SAVEPOINT bs_reconciliation' : 'RELEASE SAVEPOINT bs_reconciliation');
+        }
+        return $out;
+    }
+
+    /**
+     * @param array{fy_beg_date: string, fy_end_date: string} $fyRow
+     * @return array{liab: float, asset: float, pl: float}|null
+     */
+    private function readBsTotals(array $fyRow, string $from, string $to): ?array
+    {
+        try {
+            // merged, not replaced: whatever else the installation keeps in the session is left alone
+            $_SESSION = array_merge(is_array($_SESSION ?? null) ? $_SESSION : [], [
+                'ses_company_id'           => $this->cmp,
+                'ses_comp_fy_id'           => $this->fy,
+                'ses_boid'                 => $this->bo ?? 0,
+                'ses_company_fy_beginning' => (string)$fyRow['fy_beg_date'],
+                'ses_company_fy_end'       => (string)$fyRow['fy_end_date'],
+                'ses_dflt_val_method'      => $fyRow['def_val_method'] ?? 'AVG',
+                'ses_company_name'         => (string)($_SESSION['ses_company_name'] ?? ''),
+            ]);
+            // A repair over every branch is the report's "Consolidated In All Branches"; one branch is that branch.
+            $rows = (new ReportingModel())->load_balance_sheet_view(1, 1, $from, $to, 1, $this->bo === null);
+            $last = end($rows);
+            if (!is_array($last) || !isset($last['l_balance_total'], $last['r_balance_total'])) { return null; }
+            $pl = 0.0;
+            foreach ($rows as $r) {
+                if (($r['l_type'] ?? '') === 'pl' && ($r['l_group_name'] ?? '') === 'Profit / Loss') { $pl = (float)$r['l_balance_total']; }
+            }
+            return ['liab' => (float)$last['l_balance_total'], 'asset' => (float)$last['r_balance_total'], 'pl' => $pl];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Ties the Balance Sheet on the screen to the vouchers behind it, in three steps:
+     *   1  is the report adding up correctly?  Its difference must be the ledger's own debit-minus-credit.
+     *      If they agree the arithmetic is right and the ledger is what is wrong; if not, the gap between them
+     *      is a reporting problem and is named as one.
+     *   2  what that difference is made of: the part the vouchers' own rows account for, and the part that
+     *      needs a person. The two are measured (ledger before minus ledger after), not estimated, and their
+     *      sum is checked back against step 1.
+     *   3  what the Balance Sheet reads once the first part is completed - the figures are taken from the real
+     *      thing inside the transaction that is about to be rolled back.
+     * Nothing here changes a figure or proposes a balancing entry.
+     *
+     * @param array{liab: float, asset: float, pl: float}|null $bsBefore
+     * @param array{liab: float, asset: float, pl: float}|null $bsAfter   null when nothing would be changed
+     * @param array{fixed: array<mixed>, review: array<mixed>}            $plan
+     */
+    /**
+     * Does the Balance Sheet's own difference account for the ledger's, or is part of it the report's doing?
+     * The two are measured from opposite sides - liabilities minus assets against debit minus credit - so they
+     * are equal and opposite when the report is merely showing what the ledger holds. Half a paisa per side is
+     * allowed for the rounding every ledger balance carries.
+     */
+    private function reportAgreesWithLedger(float $bsDifference, float $ledgerDifference): bool
+    {
+        return abs(round($bsDifference + $ledgerDifference, 2)) < 0.02;
+    }
+
+    private function reconciliation(?array $bsBefore, ?array $bsAfter, float $before, float $after, array $plan): void
+    {
+        $this->heading('BALANCE SHEET RECONCILIATION');
+
+        CLI::write('  1. Is the Balance Sheet calculating wrongly, or is the ledger out of balance?');
+        if ($bsBefore === null) {
+            CLI::write('     the Balance Sheet could not be built from here, so this step is unproven; the ledger figures below still hold.', 'yellow');
+        } else {
+            $bsDiff = round($bsBefore['liab'] - $bsBefore['asset'], 2);
+            CLI::write(sprintf('     Balance Sheet   liabilities %18s   assets %18s   difference %18s', $this->n($bsBefore['liab']), $this->n($bsBefore['asset']), $this->drcr(-$bsDiff)));
+            CLI::write(sprintf('     Ledger          debit minus credit of every posted row%48s', $this->drcr($before)));
+            $gap = round($bsDiff + $before, 2);
+            if ($this->reportAgreesWithLedger($bsDiff, $before)) {
+                CLI::write('     Both are the same figure, so the report adds up correctly. It cannot tally because the ledger it reads', 'green');
+                CLI::write('     does not obey double entry: that is a posting problem, not a reporting one and not an accounting difference.', 'green');
+            } else {
+                CLI::write('     They are NOT the same: ' . $this->n(abs($gap)) . ' of the difference is not in the ledger at all, so that much is a', 'yellow');
+                CLI::write('     reporting problem and has to be found in the report code, not in the vouchers.', 'yellow');
+            }
+        }
+
+        CLI::newLine();
+        CLI::write('  2. What the ledger difference is made of');
+        // Two independent figures, deliberately: what the rules say they close (added up from the plan) and what
+        // the ledger actually moved when the plan was applied. They must be the same, and the first one plus what
+        // is left must be the whole difference. If either does not hold, the run says so and is not to be acted on.
+        $planned = 0.0;
+        foreach ($plan['actions'] as $a) { $planned += (float)($a['delta'] ?? 0.0); }
+        $planned  = round(-$planned, 2);
+        $measured = round($before - $after, 2);
+        CLI::write(sprintf('     %5d entr%-3s whose own rows show which leg is missing (the posting defect) %18s',
+            count($plan['fixed']), count($plan['fixed']) === 1 ? 'y' : 'ies', $this->drcr($planned)));
+        CLI::write(sprintf('     %5d entry group(s) whose rows do not show it, for a person to decide      %18s',
+            count($plan['review']), $this->drcr($after)));
+        $sum = round($planned + $after, 2);
+        CLI::write(sprintf('     %5s                                                                      %18s   %s', '', $this->drcr($sum),
+            abs($sum - $before) < 0.005 ? 'exactly the difference in step 1' : 'DOES NOT match step 1 - do not act on this run'));
+        if (abs($planned - $measured) >= 0.005) {
+            CLI::write('     [WARN] completing those entries moved the ledger by ' . $this->drcr($measured) . ', not the '
+                . $this->drcr($planned) . ' the rules planned: something else changed these rows. Do not act on this run.', 'yellow');
+        }
+
+        CLI::newLine();
+        CLI::write('  3. What the Balance Sheet reads once the first line of step 2 is completed');
+        if ($bsAfter === null) {
+            CLI::write('     nothing can be completed from the stored rows, so the figures above are unchanged.', 'yellow');
+        } else {
+            $d = round($bsAfter['liab'] - $bsAfter['asset'], 2);
+            CLI::write(sprintf('     Balance Sheet   liabilities %18s   assets %18s   difference %18s', $this->n($bsAfter['liab']), $this->n($bsAfter['asset']), $this->drcr(-$d)));
+            if ($bsBefore !== null) {
+                CLI::write(sprintf('     Profit / Loss   %18s   (it reads %s today)', $this->n($bsAfter['pl']), $this->n($bsBefore['pl'])));
+            }
+            if (abs($d) < 0.005) {
+                CLI::write('     The Balance Sheet tallies. Every difference was an incomplete entry that the vouchers themselves accounted for.', 'green');
+            } else {
+                CLI::write('     ' . $this->drcr(-$d) . ' is left. It is the ' . count($plan['review']) . ' entry group(s) listed above, and it is the only part of the', 'yellow');
+                CLI::write('     difference the stored data cannot explain - each one has to be looked at before anyone calls it a genuine difference.', 'yellow');
+            }
+        }
+        CLI::newLine();
+        CLI::write('  Measured on the real ledger; no figure here was adjusted and no balancing entry was invented.');
     }
 
     // ==================================================================================================
