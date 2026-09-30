@@ -165,10 +165,13 @@ ok(preg_match('/series name: PURCHASE-MAIN/', $outC) === 1, 'the voucher detail 
    substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
 ok(preg_match('/narration: Composition purchase from ABC Suppliers$/m', $outC) === 1,
    'and its narration, with the markup and the runs of spaces taken out', substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
-ok(preg_match('/register \(acctvchreg\), 3 row\(s\):/', $outC) === 1
-   && preg_match('/type 3\s+Dr\s+50,000\.00\s+Cr\s+0\.00\s+Purchases/', $outC) === 1
-   && preg_match('/register total: debit 50,000\.00\s+credit 118,000\.00\s+difference 68,000\.00 Cr/', $outC) === 1,
-   'the register rows are listed in full and totalled', substr($outC, (int)strpos($outC, 'voucher 23 '), 700));
+ok(preg_match('/register \(acctvchreg\), 3 row\(s\), columns: acct_vch_reg_id, acct_vch_type, cmp_id/', $outC) === 1,
+   'the register rows are listed, with the columns this installation actually has',
+   substr($outC, (int)strpos($outC, 'voucher 23 '), 900));
+ok(preg_match('/acct_vch_type=3\s+vch_date=2025-09-10\s+acc_id=108\s+acc_txn_dr_amt=50000\.00.*Purchases/', $outC) === 1,
+   'each row shows every field it carries, and the ledger name behind the account id',
+   substr($outC, (int)strpos($outC, 'voucher 23 '), 900));
+ok(!preg_match('/\bcmp_id=/', substr($outC, (int)strpos($outC, 'register (acctvchreg)'), 400)), 'the columns that only repeat the query are left out');
 ok(!str_contains(substr($outC, (int)strpos($outC, 'voucher 23 ')), 'no ledger row in this voucher'),
    'voucher 23: every register account has a ledger row, so nothing is flagged');
 [$outE, $dE] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 25');
@@ -180,6 +183,15 @@ ok(($dE['voucher_detail'][0]['register_only_accounts'][0] ?? '') === 'CGST INPUT
 ok(($dC['voucher_detail'][0]['series_name'] ?? '') === 'PURCHASE-MAIN'
    && str_contains((string)($dC['voucher_detail'][0]['narration'] ?? ''), 'ABC Suppliers')
    && count($dC['voucher_detail'][0]['register'] ?? []) === 3, 'the same three are in the JSON', json_encode($dC['voucher_detail'][0] ?? null));
+// An installation whose register keeps different columns (this is what production turned out to have):
+// the rows must still be printed and the account with no ledger row must still be named.
+sh($psql . " -c " . escapeshellarg("ALTER TABLE acctvchreg DROP COLUMN acc_txn_dr_amt, DROP COLUMN acc_txn_cr_amt, DROP COLUMN acc_txn_type"));
+[$outF, $dF] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 25');
+ok(($dF['verdict']['fail'] ?? -1) === 0 && preg_match('/register \(acctvchreg\), 2 row\(s\), columns: /', $outF) === 1
+   && preg_match('/accounts in the register that have no ledger row in this voucher: CGST INPUT A\/C \(acc 141\)/', $outF) === 1,
+   'a register with a different set of columns is still read, and still names the leg that went missing',
+   substr($outF, (int)strpos($outF, 'voucher 25 '), 700));
+
 sh($psql . " -c " . escapeshellarg("DROP TABLE vchseriesn, vchlongnar, acctvchreg"));
 [$outD, $dD] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 23');
 ok(($dD['verdict']['fail'] ?? -1) === 0 && preg_match('/voucher 23 /', $outD) === 1
