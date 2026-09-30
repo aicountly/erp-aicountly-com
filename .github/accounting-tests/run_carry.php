@@ -17,6 +17,8 @@ if ($rows === false) {
         // stock held at no cost: the quantity still has to be carried, or the next year issues from nothing
         ['itm_id_unit_id' => 'ITEM-E_1', 'item_name' => 'FREE SAMPLES', 'method' => 'AVG',
          'item_qty_avail' => 3,     'item_value_avail' => 0.00],
+        ['itm_id_unit_id' => 'ITEM-F_1', 'item_name' => 'LEGACY METHOD ROW', 'method' => 'AVG',
+         'item_qty_avail' => 4,     'item_value_avail' => 800.00],
     ]);
 }
 $stub = "<?php\nnamespace App\\Models\\Admin;\nclass StockStatusModel {\n"

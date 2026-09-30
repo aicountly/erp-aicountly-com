@@ -52,17 +52,21 @@ $openingTotal = function () use ($psql) {
 // =====================================================================================================
 $reload();
 $before = $stored();
-ok(in_array('qty:ITEM-A_1=0.00', $before, true) && in_array('val:ITEM-A_1:3=0.00', $before, true),
+ok(in_array('qty:ITEM-A_1=0.00', $before, true) && in_array('val:ITEM-A_1:AVG=0.00', $before, true),
    'the fixture starts the way the roll-over leaves a year: the big item at nil', implode(' ', $before));
-ok(abs($openingTotal() - 1499.00) < 0.005, 'and its stored opening totals 1,499.00', (string)$openingTotal());
+ok(abs($openingTotal() - 2299.00) < 0.005, 'and its stored opening totals 2,299.00', (string)$openingTotal());
 
 $dry = $run('--company 1 --fy 2 --branch 1');
 ok(str_contains($dry, 'DRY RUN (nothing is written)'), 'it is a dry run unless --apply is given', $dry);
 ok(str_contains($dry, 'from fy 1 (2023-04-01 .. 2024-03-31)'),
    'it finds the previous financial year on its own', $dry);
-ok(str_contains($dry, 'previous year closed with : 4 item(s), value 4,263,640.16'),
+ok(str_contains($dry, 'previous year closed with : 5 item(s), value 4,264,440.16'),
    'it reads the previous closing from the report, item by item', $dry);
-ok(str_contains($dry, 'rows to change            : 9'), 'and plans nine rows', $dry);
+ok(str_contains($dry, 'rows to change            : 10'), 'and plans ten rows', $dry);
+// itm_val_method_id holds the method's NAME in this table; a row saying 3 means AVG and must be put right
+// rather than left beside a second AVG row that would double the item's opening value
+ok(str_contains($dry, 'LEGACY METHOD ROW                  method held as "3" where this table uses "AVG" was 800.00  ->  800.00'),
+   'a row that names its method the other way is corrected in place, not duplicated', $dry);
 // stock carried at no cost: the quantity still matters, or next year issues from an empty pool
 ok(str_contains($dry, 'FREE SAMPLES                       quantity                                       (new row)  ->  3.00'),
    'an item with a quantity but no value is still carried', $dry);
@@ -81,15 +85,15 @@ ok(str_contains($dry, 'itmoppyval  P.S PLASTIC STRIPS V200            value (AVG
    'the value goes in as 4,262,806.62 on the AVG row', $dry);
 ok(str_contains($dry, 'FRAMED PICTURES                    quantity                                       (new row)'),
    'an item with no stored row at all is inserted, not skipped', $dry);
-ok(str_contains($dry, 'value (LIFO) cleared, it would be counted twice was 500.00  ->  0.00'),
+ok(str_contains($dry, 'value (LIFO) cleared, it would be counted twice was 500.00  ->  0.00'),  // stored as '2'
    'another method\'s row is cleared: the reports add every method row together', $dry);
 ok(str_contains($dry, 'ITEM-C_1         12.00         999.00')
    && str_contains($dry, 'left alone - this year opens with these, the previous year did not close with them'),
    'stock the previous year did not close with is reported and left alone, not deleted', $dry);
-ok(str_contains($dry, 'rows inserted / updated : 4 / 5'), 'four inserts and five updates', $dry);
-ok(str_contains($dry, "previous year's closing : 4,263,640.16")
+ok(str_contains($dry, 'rows inserted / updated : 4 / 6'), 'four inserts and six updates', $dry);
+ok(str_contains($dry, "previous year's closing : 4,264,440.16")
    && str_contains($dry, 'left alone on items the previous year did not close with : 999.00')
-   && str_contains($dry, 'the two together        : 4,264,639.16   - they agree'),
+   && str_contains($dry, 'the two together        : 4,265,439.16   - they agree'),
    'the check adds the untouched stock back before comparing, instead of condemning a correct run', $dry);
 ok(str_contains($dry, 'opening quantities match the previous closing, item by item: yes'),
    'and it checks the quantities one by one, not just the total', $dry);
@@ -101,17 +105,23 @@ ok($stored() === $before, 'the dry run wrote nothing at all', implode(' ', $stor
 $app = $run('--company 1 --fy 2 --branch 1 --apply');
 ok(str_contains($app, 'APPLIED and committed'), 'it applies', substr($app, -400));
 $after = $stored();
-ok(in_array('qty:ITEM-A_1=2186.00', $after, true) && in_array('val:ITEM-A_1:3=4262806.62', $after, true),
+ok(in_array('qty:ITEM-A_1=2186.00', $after, true) && in_array('val:ITEM-A_1:AVG=4262806.62', $after, true),
    'the big item now opens with 2,186 units at 4,262,806.62', implode(' ', $after));
-ok(in_array('qty:ITEM-B_1=1.00', $after, true) && in_array('val:ITEM-B_1:3=408.54', $after, true),
+ok(in_array('qty:ITEM-B_1=1.00', $after, true) && in_array('val:ITEM-B_1:AVG=408.54', $after, true),
    'the inserted item is there with both its rows', implode(' ', $after));
-ok(in_array('val:ITEM-D_1:2=0.00', $after, true) && in_array('val:ITEM-D_1:3=425.00', $after, true),
-   'the LIFO row is cleared and the AVG row carries the value', implode(' ', $after));
-ok(in_array('qty:ITEM-C_1=12.00', $after, true) && in_array('val:ITEM-C_1:3=999.00', $after, true),
+ok(in_array('val:ITEM-D_1:2=0.00', $after, true) && in_array('val:ITEM-D_1:AVG=425.00', $after, true),
+   'the LIFO row - stored as "2" - is recognised as LIFO, cleared, and the AVG row carries the value',
+   implode(' ', $after));
+ok(in_array('qty:ITEM-C_1=12.00', $after, true) && in_array('val:ITEM-C_1:AVG=999.00', $after, true),
    'the item left for a person is untouched', implode(' ', $after));
-ok(in_array('val:ITEM-A_1:1=0.00', $after, true),
+ok(in_array('val:ITEM-A_1:FIFO=0.00', $after, true),
    'the FIFO row that was already nil stays nil rather than being written again', implode(' ', $after));
-ok(abs($openingTotal() - 4264639.16) < 0.005,
+ok(in_array('val:ITEM-F_1:AVG=800.00', $after, true)
+   && !in_array('val:ITEM-F_1:3=800.00', $after, true)
+   && count(array_filter($after, fn($r) => str_starts_with($r, 'val:ITEM-F_1:'))) === 1,
+   'the legacy row now names its method the same way as the rest, and there is still only one of it',
+   implode(' ', $after));
+ok(abs($openingTotal() - 4265439.16) < 0.005,
    'the opening the reports read is the previous closing plus the untouched 999.00', (string)$openingTotal());
 
 $again = $run('--company 1 --fy 2 --branch 1');
@@ -155,10 +165,10 @@ $csvFile = $H . '/carry.csv';
 @unlink($csvFile);
 $run('--company 1 --fy 2 --branch 1 --csv ' . escapeshellarg($csvFile));
 $csv = is_file($csvFile) ? (string)file_get_contents($csvFile) : '';
-ok(substr_count(trim($csv), "\n") === 9, 'the CSV has a line per planned row', $csv);
+ok(substr_count(trim($csv), "\n") === 10, 'the CSV has a line per planned row', $csv);
 ok(str_contains($csv, 'itmoppybal,1,2,1,ITEM-A_1,"P.S PLASTIC STRIPS V200",,quantity,0.0000,2186.0000'),
    'each line records the value it replaces, so it can be put back', $csv);
-ok(str_contains($csv, 'itmoppyval,1,2,1,ITEM-B_1,"FRAMED PICTURES",3,"value (AVG)",,408.5400'),
+ok(str_contains($csv, 'itmoppyval,1,2,1,ITEM-B_1,"FRAMED PICTURES",AVG,"value (AVG)",,408.5400'),
    'a new row is marked by an empty "was" rather than a nil that was never there', $csv);
 @unlink($csvFile);
 

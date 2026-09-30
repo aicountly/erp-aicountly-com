@@ -244,7 +244,11 @@ class CarryOpeningStock extends BaseCommand
      * This year's stored opening: the quantity rows, the value rows, and the total the reports read (which is
      * the sum of every value row, whatever its valuation method - they do not filter by it).
      *
-     * @return array{qty: array<string,float>, val: array<string,array<int,float>>, total: float, rows: int}
+     * A method is held here under its NAME, whichever form the row stores it in - this table is written with
+     * 'AVG' / 'FIFO' / 'LIFO' by the item screens, and a row holding 1 / 2 / 3 means the same thing. The form
+     * each row actually uses is kept alongside, so one written the other way can be put right.
+     *
+     * @return array{qty: array<string,float>, val: array<string,array<string,float>>, raw: array<string,array<string,string>>, total: float, rows: int}
      */
     private function currentOpening(): array
     {
@@ -255,14 +259,18 @@ class CarryOpeningStock extends BaseCommand
             $qty[$k] = round(($qty[$k] ?? 0.0) + (float)$r['itm_op_bal_qty'], 4);
             $rows++;
         }
+        $raw = [];
         foreach ($this->db->table('itmoppyval')->where('cmp_id', $this->cmp)
                  ->where('cmpfymastr_id', $this->fy)->where('hobo_id', $this->bo)->get()->getResultArray() as $r) {
-            $k = (string)$r['itm_id_unit_id']; $m = (int)$r['itm_val_method_id'];
+            $k = (string)$r['itm_id_unit_id'];
+            $stored = (string)$r['itm_val_method_id'];
+            $m = $this->methodName($stored);          // 'AVG' whether the row says AVG or 3
             $val[$k][$m] = round(($val[$k][$m] ?? 0.0) + (float)$r['itm_op_val_amt'], 2);
+            $raw[$k][$m] = $stored;
             $total = round($total + (float)$r['itm_op_val_amt'], 2);
             $rows++;
         }
-        return ['qty' => $qty, 'val' => $val, 'total' => $total, 'rows' => $rows];
+        return ['qty' => $qty, 'val' => $val, 'raw' => $raw, 'total' => $total, 'rows' => $rows];
     }
 
     // ==================================================================================================
@@ -286,17 +294,26 @@ class CarryOpeningStock extends BaseCommand
                 $changes[] = ['table' => 'itmoppybal', 'key' => $key, 'name' => $c['name'], 'method' => null,
                               'to' => $c['qty'], 'was' => $was, 'what' => 'quantity'];
             }
-            $method = $this->methodId($c['method']);
+            $method = $this->methodName($c['method']);
             $stored = $current['val'][$key] ?? [];
             $wasVal = $stored[$method] ?? null;
+            $form   = $current['raw'][$key][$method] ?? null;
+            if ($form !== null && $form !== $method) {
+                // The row means the right method but says it in a form nothing else in this table uses.
+                $changes[] = ['table' => 'itmoppyval', 'key' => $key, 'name' => $c['name'], 'method' => $form,
+                              'to' => $c['value'], 'was' => $wasVal, 'form' => $method,
+                              'what' => 'method held as "' . $form . '" where this table uses "' . $method . '"'];
+                continue;
+            }
             if ($wasVal === null || abs($wasVal - $c['value']) > self::TOLERANCE) {
                 $changes[] = ['table' => 'itmoppyval', 'key' => $key, 'name' => $c['name'], 'method' => $method,
-                              'to' => $c['value'], 'was' => $wasVal, 'what' => 'value (' . $c['method'] . ')'];
+                              'to' => $c['value'], 'was' => $wasVal, 'what' => 'value (' . $method . ')'];
             }
             foreach ($stored as $m => $amount) {                     // the other methods must not add to the total
                 if ($m !== $method && abs($amount) > self::TOLERANCE) {
-                    $changes[] = ['table' => 'itmoppyval', 'key' => $key, 'name' => $c['name'], 'method' => $m,
-                                  'to' => 0.0, 'was' => $amount, 'what' => 'value (' . $this->methodName($m) . ') cleared, it would be counted twice'];
+                    $changes[] = ['table' => 'itmoppyval', 'key' => $key, 'name' => $c['name'],
+                                  'method' => $current['raw'][$key][$m] ?? $m, 'to' => 0.0, 'was' => $amount,
+                                  'what' => 'value (' . $m . ') cleared, it would be counted twice'];
                 }
             }
         }
@@ -334,7 +351,9 @@ class CarryOpeningStock extends BaseCommand
                 $this->db->table($c['table'])->insert($where + [$column => $c['to']]);
                 $inserted++;
             } else {
-                $this->db->table($c['table'])->where($where)->update([$column => $c['to']]);
+                $set = [$column => $c['to']];
+                if (isset($c['form'])) { $set['itm_val_method_id'] = $c['form']; }
+                $this->db->table($c['table'])->where($where)->update($set);
                 $updated++;
             }
         }
@@ -456,14 +475,14 @@ class CarryOpeningStock extends BaseCommand
         ];
     }
 
-    private function methodId(string $name): int
+    /**
+     * The valuation method's canonical name. The item screens write 'AVG' / 'FIFO' / 'LIFO' into
+     * itm_val_method_id and the export code reads either that or 1 / 2 / 3, so both are understood here and
+     * the name is what gets written.
+     */
+    private function methodName(string $m): string
     {
-        return match (strtoupper(trim($name))) { 'FIFO' => 1, 'LIFO' => 2, default => 3 };
-    }
-
-    private function methodName(int $id): string
-    {
-        return match ($id) { 1 => 'FIFO', 2 => 'LIFO', default => 'AVG' };
+        return match (strtoupper(trim($m))) { 'FIFO', '1' => 'FIFO', 'LIFO', '2' => 'LIFO', default => 'AVG' };
     }
 
     private function n(float $v): string { return number_format($v, 2, '.', ','); }
