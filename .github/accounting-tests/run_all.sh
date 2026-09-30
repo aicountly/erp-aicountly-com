@@ -19,6 +19,7 @@ run "export files == page rows"          php test_export.php
 run "FY roll-over (Rewrite Books)"       php test_rollover.php
 run "audit command (read only, attribution)"     php test_audit.php
 run "composition posting: save + repair"         php test_composition.php
+run "opening stock: previous close -> this open" php test_carry.php
 ./reload_db.sh stress >/dev/null 2>&1
 run "old code vs the same identities (demo)"  bash -c 'php demo_legacy_failures.php | head -1; exit 0'
 exit $rc

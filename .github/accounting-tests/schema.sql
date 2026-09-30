@@ -51,6 +51,13 @@ CREATE TABLE itmoppyval (
   itm_py_val_amt numeric(18,2) DEFAULT 0, itm_val_method_id int, mat_cent_id int
 );
 
+-- the opening QUANTITY lives in its own table; the opening VALUE is in itmoppyval above, and the
+-- valuation engine needs both before it will use an average (StockStatusModel::computeValuation)
+CREATE TABLE itmoppybal (
+  cmp_id int, cmpfymastr_id int, hobo_id int, itm_id_unit_id text, itm_op_bal_qty numeric(18,4),
+  itm_py_bal_qty numeric(18,4) DEFAULT 0, mat_cent_id int
+);
+
 CREATE TABLE hobomaster (cmp_id int, hobo_id int, hobo_name text);
 CREATE TABLE acctmstdet (cmp_id int, acc_id int, acc_is_sys_acc int, acc_is_sez int);
 CREATE TABLE cmpmastern (cmp_id int PRIMARY KEY, cmp_name text, cmp_status int DEFAULT 1);

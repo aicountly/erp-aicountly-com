@@ -28,6 +28,7 @@ PHP 8.1+ CLI with `pgsql`, `zip`, `xml`, `mbstring`, `gd`; `node` for the export
 | `test_rollover.php` | rollover | the REAL `FYModel` roll-over over three years: openings equal an independent computation and the opening trial balance nets to zero |
 | `test_audit.php` | stress / rollover / pairs | the read-only `audit:books` command: figures it reports equal the hand-known ones, the database is byte-identical afterwards, the year-end attribution adds up, and (pairs) vouchers are grouped with their linked composition-scheme journals, the row-by-row detail and the CSV are right, optional tables may be missing |
 | `test_composition.php` | pairs / gst | composition-scheme posting end to end: the real `runTransaction()` writes a balanced entry for every shape, an entry that cannot be balanced is refused, and `books:repair-composition` completes only what the stored rows account for. Its Balance Sheet reconciliation is checked too: the report's difference against the ledger's, the split into what the rows explain and what needs a person, the plan against the effect actually measured, and that an unreadable report cannot take the repair down with it |
+| `test_carry.php` | stock | `books:carry-opening-stock`: the previous year's closing becomes this year's opening in BOTH tables (`itmoppybal` quantity and `itmoppyval` value - the value alone leaves the valuation average at nil and the year worse off), another valuation method's row is cleared so the un-filtered sum cannot count the stock twice, stock the previous year did not close with is reported and left alone, a negative closing quantity is refused, and a write that does not read back rolls the whole run back |
 | `demo_legacy_failures.php` | stress | the same identities against the OLD calculation (kept as `legacy_*`): it fails, which is the root cause of the mismatches |
 | `mutation_export.py` | stress | 13 deliberate breakages of the export path (swap debit/credit, drop a row, blank->0, abs(), lose a note, wrong nil_type / consolidated / view / dates ...) must each make `test_export.php` fail |
 
@@ -54,6 +55,10 @@ php repair_rehearsal.php roll && php repair_rehearsal.php show   # re-running Re
 ```
 
 ## Read-only audit of real data
+
+`fixture_sides.sql` holds the two shapes the "System Generated" GST entries come in on real data - every leg on the credit side with GST PAID A/C equal to the tax legs (which rule W corrects by moving that one leg), and GST PAID A/C at exactly twice its tax legs (which it refuses, because halving the debit and doubling the credit both balance the entry but land in different places) - plus eleven near misses it must leave alone: a tax leg of 0.00, a leg that is not a tax ledger, two GST PAID legs, tax legs facing each other, and an amount 2.50 short of the total.
+
+`fixture_stock.sql` is two financial years whose opening stock rows are what the roll-over leaves behind: an item at nil that should carry 2,186 units, an item with no rows at all, an item this year opens with that the previous year never closed with, and an item carrying a value on a second valuation method. The previous year's closing figures come from a stubbed Stock Status report (`run_carry.php`), because the real one reads item tables this sandbox does not carry; what is under test is what the command does with those figures.
 
 `app/Commands/AuditBooks.php` (`php spark audit:books`) is the tool for real companies. It runs inside `BEGIN READ ONLY`
 (PostgreSQL refuses any write) and never adjusts a figure. `run_audit.php` runs it against the sandbox:
