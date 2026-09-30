@@ -14,10 +14,13 @@
 --   107       0.00   retired in favour of 108                -> LEAVE ALONE
 --   108  100.00 Cr   took 107's balance                      -> LEAVE ALONE
 --   109  no row      never carried                           -> to insert
---   110       0.00   should hold last year's result, 200 Cr  -> only from --appropriation
+--   110  900.00 Dr   should hold last year's result, 200 Cr  -> only from --appropriation
 --
--- Stored openings net 60.00 Cr, which is 'Difference in Opening'. Correcting 102, 109 and 110 takes it to
+-- Stored openings net 840.00 Dr, which is 'Difference in Opening'. Correcting 102, 109 and 110 takes it to
 -- exactly 0.00; the 107/108 pair nets to nothing, which is why leaving it alone is safe.
+--
+-- 110 differs from its previous closing on purpose: it must NOT show up in the list of differing ledgers,
+-- because naming it does not set it to that closing. It has a line of its own.
 
 TRUNCATE itmoppyval, itmoppybal, accttxnmst, accoppybal, undercrsmt, acctmaster, accgrpmstn, grpparentn,
          cmpfymastr, vchtxnconso, hobomaster, acctmstdet, cmpmastern, vchtypemst RESTART IDENTITY;
@@ -63,4 +66,4 @@ INSERT INTO accoppybal (cmp_id,cmpfymastr_id,acc_id,hobo_id,acc_op_bal,acc_py_ba
  (1,2,102,1, 540, 540,0),
  (1,2,107,1,   0,   0,0),
  (1,2,108,1,-100,-100,0),
- (1,2,110,1,   0,   0,0);
+ (1,2,110,1, 900, 900,0);

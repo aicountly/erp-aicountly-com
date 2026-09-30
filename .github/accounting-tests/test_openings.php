@@ -44,11 +44,11 @@ $stored = function () use ($psql) {
 // =====================================================================================================
 $reload();
 $before = $stored();
-ok($before === ['101=-500.00', '102=540.00', '107=0.00', '108=-100.00', '110=0.00'],
+ok($before === ['101=-500.00', '102=540.00', '107=0.00', '108=-100.00', '110=900.00'],
    'the fixture opens the way it says it does', implode(' ', $before));
 
 $look = $run('--company 1 --fy 2 --branch 1');
-ok(str_contains($look, "'Difference in Opening' as it stands : 60.00 Cr"),
+ok(str_contains($look, "'Difference in Opening' as it stands : 840.00 Dr"),
    'it reads the opening difference the reports read', $look);
 ok(str_contains($look, 'previous year: profit 200.00 Cr'), "and the previous year's result", $look);
 ok(str_contains($look, 'Nothing named, so nothing is written'), 'without --accounts it writes nothing', $look);
@@ -64,11 +64,16 @@ ok(!str_contains($look, 'Owner Capital'),
    'a ledger that already opens correctly is not listed at all', $look);
 ok(!str_contains($look, 'Sales') && !str_contains($look, 'Purchases'),
    'profit & loss ledgers are not listed: they start every year at zero', $look);
+// It is a balance-sheet ledger, so it would otherwise appear here too - saying "would become 0.00", which
+// is not what naming it does. One statement about it, not two that can disagree.
+ok(preg_match('/^\s+110\s+Profit & Loss Appropriation\s+0\.00/m', $look) !== 1,
+   'the Appropriation is never in the list, though its opening differs: naming it does not set it to that figure',
+   $look);
 ok(str_contains($look, 'A retired ledger and its replacement look exactly like a pair of mistakes here'),
    'and the list says in so many words that it is not a work order', $look);
 
 // the Appropriation is the one ledger whose opening is not simply last year's closing
-ok(str_contains($look, "'Profit & Loss Appropriation' (acc 110): opening 0.00; the previous year closed it at 0.00 and made 200.00 Cr")
+ok(str_contains($look, "'Profit & Loss Appropriation' (acc 110): opening 900.00 Dr; the previous year closed it at 0.00 and made 200.00 Cr")
    && str_contains($look, 'so carrying both would put it at 200.00 Cr. Pass --appropriation 200.00Cr to set it.'),
    'the Appropriation gets its own line, with the figure worked out', $look);
 
@@ -80,9 +85,9 @@ ok(str_contains($dry, 'rows inserted / updated : 1 / 2'),
    'one insert for the ledger with no row, two updates', $dry);
 ok(str_contains($dry, "acc 102    HDFC Bank                      the previous year's closing balance  was 540.00 Dr  ->  550.00 Dr")
    && str_contains($dry, "acc 109    MISSING ROW LTD                the previous year's closing balance  (no row)  ->  250.00 Dr")
-   && str_contains($dry, 'acc 110    Profit & Loss Appropriation    given with --appropriation           was 0.00  ->  200.00 Cr'),
+   && str_contains($dry, 'acc 110    Profit & Loss Appropriation    given with --appropriation           was 900.00 Dr  ->  200.00 Cr'),
    'each row says where its figure came from', $dry);
-ok(str_contains($dry, "'Difference in Opening' before : 60.00 Cr")
+ok(str_contains($dry, "'Difference in Opening' before : 840.00 Dr")
    && str_contains($dry, "'Difference in Opening' after  : 0.00")
    && str_contains($dry, 'predicted from the changes     : 0.00   - they agree')
    && str_contains($dry, 'The opening data of this year now balances.'),
@@ -121,9 +126,9 @@ ok(str_contains($noName, '--appropriation was given but ledger 110 is not in --a
 // Dr / Cr, so a credit needs no leading minus on a command line
 $reload();
 $drRun = $run('--company 1 --fy 2 --branch 1 --accounts 110 --appropriation 200Dr');
-ok(str_contains($drRun, 'was 0.00  ->  200.00 Dr'), '"200Dr" is a debit', $drRun);
+ok(str_contains($drRun, 'was 900.00 Dr  ->  200.00 Dr'), '"200Dr" is a debit', $drRun);
 $bare = $run('--company 1 --fy 2 --branch 1 --accounts 110 --appropriation 1,234.50');
-ok(str_contains($bare, 'was 0.00  ->  1,234.50 Dr'), 'a bare number is a debit, and commas are tolerated', $bare);
+ok(str_contains($bare, 'was 900.00 Dr  ->  1,234.50 Dr'), 'a bare number is a debit, and commas are tolerated', $bare);
 
 // =====================================================================================================
 //  naming a ledger that should have been left alone is allowed, and reported honestly
@@ -131,9 +136,9 @@ ok(str_contains($bare, 'was 0.00  ->  1,234.50 Dr'), 'a bare number is a debit, 
 $reload();
 $retired = $run('--company 1 --fy 2 --branch 1 --accounts 107');
 ok(str_contains($retired, 'acc 107    OLD SUPPLIER'), 'a retired ledger IS corrected when named: the reader decides', $retired);
-ok(str_contains($retired, "'Difference in Opening' after  : 160.00 Cr")
-   && str_contains($retired, 'predicted from the changes     : 160.00 Cr   - they agree')
-   && str_contains($retired, '160.00 Cr is still left'),
+ok(str_contains($retired, "'Difference in Opening' after  : 740.00 Dr")
+   && str_contains($retired, 'predicted from the changes     : 740.00 Dr   - they agree')
+   && str_contains($retired, '740.00 Dr is still left'),
    'and the command says plainly that this takes the opening further out, not closer', $retired);
 
 // =====================================================================================================
