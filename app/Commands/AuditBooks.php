@@ -669,6 +669,7 @@ class AuditBooks extends BaseCommand
                   WHERE a.cmp_id = ? AND a.acc_txn_type = 1 AND a.vch_txn_id IN ($in) AND a.acc_txn_date BETWEEN ? AND ? {$this->b()}", [$this->cmp, $this->fyStart, $this->to])->getResultArray());
             foreach ((array)$r as $x) { $rows[(int)$x['id']][] = $x; }
         }
+        $composition = $this->optional(fn() => new \App\Libraries\CompositionPosting($this->db, $this->cmp));
         $summary = []; $accs = []; $ambiguous = 0;
         foreach ($still as $root => $g) {
             $legs = [];
@@ -681,20 +682,26 @@ class AuditBooks extends BaseCommand
             $alts = $this->legSubsets($cand, round(abs($g['net']), 2));
             $zeroGst = false;
             foreach ($legs as $l) { if ($l['side'] === 1 && $l['amt'] == 0.0 && preg_match('/gst\s*paid/i', $l['acc'])) { $zeroGst = true; } }
+            // The one place that defines these shapes is the posting library, so the audit and the repair can
+            // never describe the same voucher differently. It answers null when it cannot see the group the
+            // same way this section does, and then nothing is claimed.
+            $shape = $this->optional(fn() => $composition?->shapeOf($g['members'], round((float)$g['net'], 2)));
             if ($alts) {
                 $hit = $alts[0];
                 $names = array_map(fn($i) => $cand[$i]['acc'], $hit); sort($names);
                 $text = implode('  OR  ', array_map(fn($idx) => ($side === 2 ? 'Cr ' : 'Dr ') . implode(' + ', array_map(fn($i) => $cand[$i]['acc'] . ' ' . $this->n($cand[$i]['amt']), $idx)), $alts));
                 if (count($alts) > 1) { $ambiguous++; }
                 $key = ($side === 2 ? 'the credit' : 'the debit') . ' legs on ' . implode(' + ', $names);
+                if ($shape !== null) { $text .= ' - ' . $shape['text']; $key .= ' (' . $shape['tag'] . ')'; }
                 foreach ($hit as $i) {
                     $a = $cand[$i]; $k2 = $a['id'] . ':' . $a['side'];
                     $accs[$k2] = $accs[$k2] ?? ['id' => $a['id'], 'name' => $a['acc'], 'side' => $a['side'], 'amt' => 0.0, 'n' => 0];
                     $accs[$k2]['amt'] += $a['amt']; $accs[$k2]['n']++;
                 }
             } else {
-                $text = 'no combination of up to 3 legs equals the difference: a leg is missing' . (($suffix[$root] ?? '') !== '' ? ' [' . trim($suffix[$root], ' ()') . ']' : '');
-                $key = '(no combination of up to 3 legs equals it: a leg is missing)';
+                $text = ($shape['text'] ?? 'no combination of up to 3 legs equals the difference: a leg is missing')
+                      . (($suffix[$root] ?? '') !== '' ? ' [' . trim($suffix[$root], ' ()') . ']' : '');
+                $key = '(' . ($shape['label'] ?? 'no combination of up to 3 legs equals it: a leg is missing') . ')';
             }
             if ($zeroGst) { $text .= ' [the GST PAID A/C debit leg of this group is 0.00]'; $key .= ' [GST PAID A/C debit is 0.00]'; }
             foreach ($g['members'] as $m) { $this->note[$m]['equals'] = $text; }
@@ -706,7 +713,7 @@ class AuditBooks extends BaseCommand
         $tbl = [];
         foreach ($summary as $k => $x) { $tbl[] = ['what' => $k, '>groups' => $x['n'], '>net (Dr-Cr)' => $this->drcr($x['net']), '>gross' => $this->n($x['abs'])]; }
         CLI::write('  what the differences equal (the legs of each group that add up to its difference):');
-        $this->table($tbl, ['what' => 'the difference of the group equals', '>groups' => '>groups', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12, 76);
+        $this->table($tbl, ['what' => 'the difference of the group equals', '>groups' => '>groups', '>net (Dr-Cr)' => '>net (Dr-Cr)', '>gross' => '>gross'], 12, 104);
         $this->R['linked_explained'] = $summary;
         if ($ambiguous) { CLI::write("  ($ambiguous group(s) fit more than one set of legs, so the arithmetic alone cannot tell which is the extra one: the table counts the first, the CSV lists every alternative)", 'light_gray'); }
 
