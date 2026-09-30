@@ -91,4 +91,7 @@ INSERT INTO hobogstinm (cmp_id, hobo_id, hobo_gstin_type) VALUES (1, 1, 2);
 -- where a voucher came from: series name, narration, register entries (read by audit:books --voucher)
 INSERT INTO vchseriesn (vch_series_id,cmp_id,vch_type_id,vch_series_name) VALUES (3,1,11,'PURCHASE-MAIN');
 INSERT INTO vchlongnar (cmp_id,vch_txn_id,vch_long_narr) VALUES (1,23,'  Composition   purchase <b>from</b> ABC Suppliers  ');
-INSERT INTO acctvchreg (acct_vch_type,cmp_id,vch_txn_id,vch_date,acc_id,hobo_id) VALUES (3,1,23,'2025-09-10',103,1),(3,1,23,'2025-09-10',108,1),(7,1,23,'2025-09-10',103,1);
+INSERT INTO acctvchreg (acct_vch_type,cmp_id,vch_txn_id,vch_date,acc_id,acc_txn_dr_amt,acc_txn_cr_amt,hobo_id) VALUES
+  (3,1,23,'2025-09-10',108,50000,0,1),(3,1,23,'2025-09-10',103,0,59000,1),(7,1,23,'2025-09-10',103,0,59000,1),
+  -- voucher 25 is short a leg in the ledger; the register still carries the account it was meant to hit
+  (3,1,25,'2025-09-12',108,10000,0,1),(3,1,25,'2025-09-12',141,0,900,1);
