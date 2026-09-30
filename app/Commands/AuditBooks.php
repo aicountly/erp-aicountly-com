@@ -887,6 +887,31 @@ class AuditBooks extends BaseCommand
         CLI::write(sprintf('  voucher %d   date %s   type %s%s%s   branch %s', $id, substr((string)($h['vch_date'] ?? '?'), 0, 10), $this->vt(isset($h['vch_type_id']) ? (int)$h['vch_type_id'] : null),
             $sub !== null ? "   sub-type $sub" : '', $ser !== null ? "   series $ser" : '', $h['hobo_id'] ?? '?'), 'white');
         $rec = ['id' => $id, 'header' => $h];
+        // Where a voucher came from. A system-generated voucher has no linked voucher to point at, so its
+        // series, its narration and the registers it was written to are the only trail back to what made it.
+        if ($ser !== null && (int)$ser > 0) {
+            $sn = $this->optional(fn() => $this->db->query('SELECT vch_series_name n FROM vchseriesn WHERE cmp_id = ? AND vch_series_id = ? LIMIT 1',
+                [$this->cmp, (int)$ser])->getRowArray());
+            if ($sn && trim((string)($sn['n'] ?? '')) !== '') {
+                CLI::write('         series name: ' . trim((string)$sn['n']));
+                $rec['series_name'] = trim((string)$sn['n']);
+            }
+        }
+        $nar = $this->optional(fn() => $this->db->query('SELECT vch_long_narr t FROM vchlongnar WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 1',
+            [$this->cmp, $id])->getRowArray());
+        if ($nar && trim(strip_tags((string)($nar['t'] ?? ''))) !== '') {
+            $text = trim(preg_replace('/\s+/', ' ', strip_tags((string)$nar['t'])));
+            CLI::write('         narration: ' . mb_substr($text, 0, 200) . (mb_strlen($text) > 200 ? ' ...' : ''));
+            $rec['narration'] = $text;
+        }
+        $reg = $this->optional(fn() => $this->db->query('SELECT acct_vch_type t, COUNT(*) n FROM acctvchreg WHERE cmp_id = ? AND vch_txn_id = ? GROUP BY acct_vch_type ORDER BY 1',
+            [$this->cmp, $id])->getResultArray());
+        if ($reg) {
+            $parts = [];
+            foreach ($reg as $r) { $parts[] = 'type ' . $r['t'] . ' x' . $r['n']; }
+            CLI::write('         register entries (acctvchreg): ' . implode(', ', $parts));
+            $rec['register'] = $reg;
+        }
         $rec['rows'] = $this->printRows($id);
         $bill = $this->optional(fn() => $this->db->query('SELECT inwsup_bill_ref_no b FROM gstrinwsup WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 1', [$this->cmp, $id])->getRowArray());
         if ($bill && (string)($bill['b'] ?? '') !== '') { CLI::write('         supplier bill no: ' . $bill['b']); $rec['bill_no'] = $bill['b']; }

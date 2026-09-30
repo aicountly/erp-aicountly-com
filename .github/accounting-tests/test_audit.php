@@ -158,6 +158,24 @@ ok(($rows[38]['status'] ?? '') === 'STILL UNBALANCED (linked journal has no ledg
 sh($psql . " -c " . escapeshellarg("UPDATE undercrsmt SET under_crs_mst_id=13, crs_mst_parent_id=4, under_main_id=13, crs_mst_is_primary=0 WHERE crs_mst_type=1 AND crs_mst_id IN (117,143,144); DELETE FROM undercrsmt WHERE crs_mst_type=1 AND crs_mst_id=145;"));
 [$outN, $dN] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel');
 ok(preg_match('/where the counted legs sit:\s+Profit & Loss accounts Cr 0\.00 \/ Dr 0\.00 - as booked they do not change the profit;\s+Balance Sheet accounts Cr 6,000\.00 \/ Dr 500\.00;\s+in no group: Cr 200\.00 \/ Dr 0\.00\s*\n/', $outN) === 1 && isset($dN['linked_explained_effect']['profit_as_booked']) && abs($dN['linked_explained_effect']['profit_as_booked']) < 0.005, 'where the counted legs sit: none on Profit & Loss (profit not changed), the CESS credit (200.00) is in no group', json_encode($dN['linked_explained_effect'] ?? null));
+// where a voucher came from. A system-generated voucher has no linked voucher, so the series, the narration
+// and the registers it was written to are the only trail back to whatever made it.
+[$outC, $dC] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 23');
+ok(preg_match('/series name: PURCHASE-MAIN/', $outC) === 1, 'the voucher detail names the series the voucher belongs to',
+   substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
+ok(preg_match('/narration: Composition purchase from ABC Suppliers$/m', $outC) === 1,
+   'and its narration, with the markup and the runs of spaces taken out', substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
+ok(preg_match('/register entries \(acctvchreg\): type 3 x2, type 7 x1/', $outC) === 1,
+   'and which registers it was written to', substr($outC, (int)strpos($outC, 'voucher 23 '), 400));
+ok(($dC['voucher_detail'][0]['series_name'] ?? '') === 'PURCHASE-MAIN'
+   && str_contains((string)($dC['voucher_detail'][0]['narration'] ?? ''), 'ABC Suppliers')
+   && count($dC['voucher_detail'][0]['register'] ?? []) === 2, 'the same three are in the JSON', json_encode($dC['voucher_detail'][0] ?? null));
+sh($psql . " -c " . escapeshellarg("DROP TABLE vchseriesn, vchlongnar"));
+[$outD, $dD] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --voucher 23');
+ok(($dD['verdict']['fail'] ?? -1) === 0 && preg_match('/voucher 23 /', $outD) === 1
+   && !str_contains($outD, 'series name:') && !str_contains($outD, 'narration:'),
+   'with those two tables absent the voucher is still shown and nothing fails', substr($outD, (int)strpos($outD, 'voucher 23 '), 300));
+
 // optional tables missing (an older database, a different build): rows still shown, nothing fails
 sh($psql . " -c " . escapeshellarg("DROP TABLE vchgstsumn, gstrinwsup, itemtxnmst"));
 [$out2, $d2] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 1');
