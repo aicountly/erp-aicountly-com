@@ -218,6 +218,19 @@ ok(count($dG['ledger_detail'] ?? []) === 3
    json_encode($dG['ledger_detail'] ?? null));
 ok($dG['ledger_detail'][1]['bsd'] === '' && ($audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 141')[1]['ledger_detail'][0]['bsd'] ?? '') === 'yes',
    'a bill-sundry (tax) ledger is marked as one');
+// An opening row with no voucher is ignored by every report, so it must not be counted among the rows the
+// movement is built from - it gets its own column instead.
+sh($psql . " -c " . escapeshellarg("INSERT INTO accttxnmst (cmp_id,hobo_id,acc_id,acc_txn_date,acc_txn_dr_cr,acc_txn_amt,acc_txn_type,txn_id,vch_txn_id)
+   VALUES (1,1,103,'2025-04-01',1,12345,1,0,0)"));
+[$outM, $dM] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 103');
+ok(($dM['ledger_detail'][0]['>rows'] ?? '') === ($dG['ledger_detail'][0]['>rows'] ?? 'x')
+   && ($dM['ledger_detail'][0]['>mirror'] ?? '') === '1'
+   && abs((float)($dM['ledger_detail'][0]['closing_raw'] ?? 0) + 290940.0) < 0.005,
+   'an opening row with no voucher is counted apart and moves nothing',
+   json_encode($dM['ledger_detail'][0] ?? null));
+ok(preg_match('/"mirror rows" are opening rows with no voucher, which every report ignores/', $outM) === 1, 'and the note says what that column is');
+sh($psql . " -c " . escapeshellarg("DELETE FROM accttxnmst WHERE acc_txn_amt = 12345 AND vch_txn_id = 0"));
+
 // "movement" means this financial year, start to report date - not the report period. With a later --from
 // the period movement would be smaller; the column must not change.
 [$outH, $dH] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --from 2026-01-01 --ledger 103');

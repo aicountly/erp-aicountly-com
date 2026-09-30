@@ -1020,7 +1020,9 @@ class AuditBooks extends BaseCommand
         foreach ($ids as $id) {
             $a = $snap->accounts[$id] ?? null;
             $dates = $this->optional(fn() => $this->db->query(
-                'SELECT COUNT(*) n, MIN(acc_txn_date) f, MAX(acc_txn_date) l FROM accttxnmst
+                'SELECT COUNT(*) FILTER (WHERE vch_txn_id > 0) n, COUNT(*) FILTER (WHERE COALESCE(vch_txn_id,0) <= 0) mirror,
+                        MIN(acc_txn_date) FILTER (WHERE vch_txn_id > 0) f, MAX(acc_txn_date) FILTER (WHERE vch_txn_id > 0) l
+                   FROM accttxnmst
                   WHERE cmp_id = ? AND acc_txn_type = 1 AND acc_id = ? AND acc_txn_date BETWEEN ? AND ?' . $this->b('accttxnmst'),
                 [$this->cmp, $id, $this->fyStart, $this->to])->getRowArray());
             $row = [
@@ -1029,6 +1031,7 @@ class AuditBooks extends BaseCommand
                 'bsd'       => !empty($a['is_bsd']) ? 'yes' : '',
                 '>opening'  => $a ? $this->drcr((float)$a['op']) : '-',
                 '>rows'     => $dates ? (string)$dates['n'] : '?',
+                '>mirror'   => $dates && (int)$dates['mirror'] > 0 ? (string)$dates['mirror'] : '',
                 '>movement' => $a ? $this->drcr((float)$a['cum']) : '-',
                 '>closing'  => $a ? $this->drcr((float)$a['closing']) : '-',
                 'first'     => $dates && $dates['f'] ? substr((string)$dates['f'], 0, 10) : '',
@@ -1041,9 +1044,11 @@ class AuditBooks extends BaseCommand
             $rec[] = $row + ['opening_raw' => $a ? round((float)$a['op'], 2) : null, 'closing_raw' => $a ? round((float)$a['closing'], 2) : null];
         }
         $this->table($tbl, ['id' => 'acc_id', 'name' => 'ledger', 'bsd' => 'bill sundry', '>opening' => '>opening', '>rows' => '>rows',
-                            '>movement' => '>movement', '>closing' => '>closing', 'first' => 'first entry', 'last' => 'last entry', 'where' => 'group / category']);
-        CLI::write('  "movement" is this financial year, from its start to the report date. A ledger with no opening, no rows and no');
-        CLI::write('  closing is dormant in this year; one with an opening but no rows carries a balance nobody has used.');
+                            '>mirror' => '>mirror rows', '>movement' => '>movement', '>closing' => '>closing', 'first' => 'first entry', 'last' => 'last entry', 'where' => 'group / category']);
+        CLI::write('  "movement" is this financial year, from its start to the report date, and "rows" counts exactly the rows it is');
+        CLI::write('  built from. "mirror rows" are opening rows with no voucher, which every report ignores, so they move nothing.');
+        CLI::write('  A ledger with no opening, no rows and no closing is dormant this year; one with an opening but no rows carries');
+        CLI::write('  a balance nobody has used.');
         $this->R['ledger_detail'] = $rec;
     }
 
