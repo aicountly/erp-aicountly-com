@@ -198,6 +198,52 @@ ok(($dD['verdict']['fail'] ?? -1) === 0 && preg_match('/voucher 23 /', $outD) ==
    && !str_contains($outD, 'series name:') && !str_contains($outD, 'narration:') && !str_contains($outD, 'register ('),
    'with those three tables absent the voucher is still shown and nothing fails', substr($outD, (int)strpos($outD, 'voucher 23 '), 300));
 
+// --ledger: what a ledger opened with, what moved through it and what it closes at - the view needed to
+// decide whether two ledgers under different names are the same account.
+[$outG, $dG] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 103,108,999');
+ok(preg_match('/2c  Ledgers asked for with --ledger/', $outG) === 1, 'the section is printed');
+ok(preg_match('/103\s+ABC Suppliers\s+80,000\.00 Cr\s+\d+\s+210,940\.00 Cr\s+290,940\.00 Cr\s+2025-04-15\s+2026-02-25\s+Sundry Creditors \/ Current Liabilities/', $outG) === 1,
+   'a ledger shows its opening, movement, closing, first and last entry, and where the report places it',
+   substr($outG, (int)strpos($outG, '2c  Ledgers'), 700));
+ok(preg_match('/108\s+Purchases\s+0\.00\s+\d+\s+183,000\.00 Dr\s+183,000\.00 Dr/', $outG) === 1,
+   'a ledger with no opening is shown as 0.00, not blank', substr($outG, (int)strpos($outG, '2c  Ledgers'), 700));
+ok(preg_match('/999\s+\(not in the account master\).*no balance and no rows in this year/', $outG) === 1,
+   'an id that is not a ledger of this company is said so rather than guessed at',
+   substr($outG, (int)strpos($outG, '2c  Ledgers'), 700));
+ok(count($dG['ledger_detail'] ?? []) === 3
+   && abs((float)($dG['ledger_detail'][0]['opening_raw'] ?? 0) + 80000.0) < 0.005
+   && abs((float)($dG['ledger_detail'][0]['closing_raw'] ?? 0) + 290940.0) < 0.005
+   && array_key_exists('closing_raw', $dG['ledger_detail'][2]) && $dG['ledger_detail'][2]['closing_raw'] === null,
+   'and the same three are in the JSON, as numbers, with null for the ledger that does not exist',
+   json_encode($dG['ledger_detail'] ?? null));
+ok($dG['ledger_detail'][1]['bsd'] === '' && ($audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 141')[1]['ledger_detail'][0]['bsd'] ?? '') === 'yes',
+   'a bill-sundry (tax) ledger is marked as one');
+// "movement" means this financial year, start to report date - not the report period. With a later --from
+// the period movement would be smaller; the column must not change.
+[$outH, $dH] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --from 2026-01-01 --ledger 103');
+ok(preg_match('/103\s+ABC Suppliers\s+80,000\.00 Cr\s+\d+\s+210,940\.00 Cr\s+290,940\.00 Cr/', $outH) === 1,
+   'the movement is the whole financial year to date even when the report period starts later',
+   substr($outH, (int)strpos($outH, '2c  Ledgers'), 500));
+
+// the same ledger id twice is one row, not two
+[$outI, $dI] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 103,103,108');
+ok(count($dI['ledger_detail'] ?? []) === 2, 'a ledger asked for twice is listed once', json_encode(array_column($dI['ledger_detail'] ?? [], 'id')));
+
+// a single-branch run counts only its own branch's rows
+sh($psql . " -c " . escapeshellarg("INSERT INTO accttxnmst (cmp_id,hobo_id,acc_id,acc_txn_date,acc_txn_dr_cr,acc_txn_amt,acc_txn_type,txn_id,vch_txn_id)
+   VALUES (1,2,103,'2025-12-01',1,55555,1,23,23)"));
+[$outJ, $dJ] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --ledger 103');
+ok(($dJ['ledger_detail'][0]['>rows'] ?? '') === ($dG['ledger_detail'][0]['>rows'] ?? 'x')
+   && abs((float)($dJ['ledger_detail'][0]['closing_raw'] ?? 0) + 290940.0) < 0.005,
+   'a row of the same ledger in another branch is left out of a single-branch run',
+   json_encode([$dJ['ledger_detail'][0] ?? null, $dG['ledger_detail'][0]['>rows'] ?? null]));
+sh($psql . " -c " . escapeshellarg("DELETE FROM accttxnmst WHERE hobo_id = 2 AND acc_txn_amt = 55555"));
+
+// the figures must be the report's own, not a second calculation
+$tbTot = 0.0;
+foreach (($dG['ledger_detail'] ?? []) as $L) { if ($L['closing_raw'] !== null) { $tbTot += $L['closing_raw']; } }
+ok(abs($tbTot - (-80000.0 - 210940.0 + 183000.0)) < 0.005, 'closing = opening + movement for every ledger shown', (string)$tbTot);
+
 // optional tables missing (an older database, a different build): rows still shown, nothing fails
 sh($psql . " -c " . escapeshellarg("DROP TABLE vchgstsumn, gstrinwsup, itemtxnmst"));
 [$out2, $d2] = $audit('--company 1 --fy 1 --branch 1 --no-legacy --no-excel --vouchers 1');

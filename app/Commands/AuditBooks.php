@@ -50,6 +50,7 @@ class AuditBooks extends BaseCommand
         '--json'           => 'Also write the findings to this JSON file.',
         '--vouchers'       => 'Show, row by row, the N (default 2) largest groups of EACH kind that still does not balance after adding the vouchers it is linked to, and N that balance thanks to a link.',
         '--voucher'        => 'Show the ledger rows, GST summary and linked vouchers of these voucher ids (comma separated).',
+        '--ledger'         => 'Show the opening, the movement and the closing of these ledger ids (comma separated), and where the report places them.',
         '--csv'            => 'Write every voucher whose debit and credit rows differ to this CSV file (with its linked vouchers and whether they balance together).',
         '--no-legacy'      => 'Skip the old-calculation comparison.',
         '--no-excel'       => 'Skip the Excel/CSV read-back test.',
@@ -139,6 +140,7 @@ class AuditBooks extends BaseCommand
             $this->guard('ledger', fn() => $this->checkLedger());
             $this->guard('vouchers', fn() => $this->checkVouchers());
             if (is_string($this->opt('voucher')) && $this->opt('voucher') !== '') { $this->guard('voucher_detail', fn() => $this->checkVoucherIds((string)$this->opt('voucher'))); }
+            if (is_string($this->opt('ledger')) && $this->opt('ledger') !== '') { $this->guard('ledger_detail', fn() => $this->checkLedgerIds((string)$this->opt('ledger'))); }
             $this->guard('structure', fn() => $this->checkStructure());
             $this->guard('openings', fn() => $this->checkOpenings());
             if ($this->opt('no-continuity') === null) { $this->guard('carry', fn() => $this->checkCarryForward()); }
@@ -996,6 +998,55 @@ class AuditBooks extends BaseCommand
     }
 
     /** Prints the ledger rows of one voucher; returns them. @return array<int,array<string,mixed>> */
+    /**
+     * --ledger: one row per ledger asked for, from the same snapshot the reports are built from, so the
+     * figures are the ones on the Trial Balance. Written for deciding whether two ledgers are the same
+     * account under two names: it shows what each one opened with, what moved through it in the period,
+     * what it closes at, and where the report places it. Read only; it proposes nothing.
+     */
+    private function checkLedgerIds(string $csv): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', explode(',', $csv)))));
+        if (!$ids) { return; }
+        $this->heading('2c  Ledgers asked for with --ledger');
+        $snap = $this->snap();
+        $cats = [];
+        foreach ($this->db->query('SELECT acc_grp_parent_id id, acc_grp_parent_name n FROM grpparentn ORDER BY 1')->getResultArray() as $r) {
+            $cats[(int)$r['id']] = (string)$r['n'];
+        }
+        $names = $this->accNames($ids);
+        $tbl = [];
+        $rec  = [];
+        foreach ($ids as $id) {
+            $a = $snap->accounts[$id] ?? null;
+            $dates = $this->optional(fn() => $this->db->query(
+                'SELECT COUNT(*) n, MIN(acc_txn_date) f, MAX(acc_txn_date) l FROM accttxnmst
+                  WHERE cmp_id = ? AND acc_txn_type = 1 AND acc_id = ? AND acc_txn_date BETWEEN ? AND ?' . $this->b('accttxnmst'),
+                [$this->cmp, $id, $this->fyStart, $this->to])->getRowArray());
+            $row = [
+                'id'        => (string)$id,
+                'name'      => $a['name'] ?? ($names[$id] ?? '(not in the account master)'),
+                'bsd'       => !empty($a['is_bsd']) ? 'yes' : '',
+                '>opening'  => $a ? $this->drcr((float)$a['op']) : '-',
+                '>rows'     => $dates ? (string)$dates['n'] : '?',
+                '>movement' => $a ? $this->drcr((float)$a['cum']) : '-',
+                '>closing'  => $a ? $this->drcr((float)$a['closing']) : '-',
+                'first'     => $dates && $dates['f'] ? substr((string)$dates['f'], 0, 10) : '',
+                'last'      => $dates && $dates['l'] ? substr((string)$dates['l'], 0, 10) : '',
+                'where'     => $a === null ? 'no balance and no rows in this year'
+                    : ((!empty($a['group_id']) && isset($snap->groups[(int)$a['group_id']]) ? $snap->groups[(int)$a['group_id']]['name'] : '(primary account)')
+                       . ' / ' . ($cats[(int)($a['cat'] ?? 0)] ?? 'outside the balance sheet / P&L')),
+            ];
+            $tbl[] = $row;
+            $rec[] = $row + ['opening_raw' => $a ? round((float)$a['op'], 2) : null, 'closing_raw' => $a ? round((float)$a['closing'], 2) : null];
+        }
+        $this->table($tbl, ['id' => 'acc_id', 'name' => 'ledger', 'bsd' => 'bill sundry', '>opening' => '>opening', '>rows' => '>rows',
+                            '>movement' => '>movement', '>closing' => '>closing', 'first' => 'first entry', 'last' => 'last entry', 'where' => 'group / category']);
+        CLI::write('  "movement" is this financial year, from its start to the report date. A ledger with no opening, no rows and no');
+        CLI::write('  closing is dormant in this year; one with an opening but no rows carries a balance nobody has used.');
+        $this->R['ledger_detail'] = $rec;
+    }
+
     /** Ledger names for a set of account ids, for tables that store only the id. @return array<int,string> */
     private function accNames(array $ids): array
     {
