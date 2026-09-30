@@ -13,6 +13,7 @@ Logic: [`deploy.sh`](deploy.sh) · Exclusions: [`rsync-excludes.txt`](rsync-excl
 | Existing files keep their permissions/owner/timestamps | `--no-perms --no-owner --no-group --no-times`; new files get `644`, new dirs `755` |
 | Nothing is lost when a file is overwritten | overwritten files are moved to `~/erp-deploy-backups/<UTC-stamp>-<sha>/` on the server (outside the web root) together with a `DEPLOY-LOG.txt` |
 | A merge can never deploy by itself | manual trigger only (`workflow_dispatch`, no push/schedule trigger); `dry_run` is ticked by default; real deploys only from `main`; one run at a time |
+| A dry run is never mistaken for a deploy | the run title in the Actions list reads `DRY RUN - nothing uploaded` or `DEPLOY - uploading to production`, so which one happened is still legible weeks later |
 | No secrets in the repo or in logs | SSH key, host, user, port and path come from GitHub secrets, are only written to `$RUNNER_TEMP` (mode 600) and deleted at the end; each secret is visible only to the steps that need it (the private key to two); no third-party actions; no shell tracing; the workflow token can only read the repository |
 | Wrong server / wrong directory is refused | a real deploy needs the server's host key pinned (`PROD_SSH_KNOWN_HOSTS`); the target must already exist and contain `index.php` and `app/Config/Paths.php` |
 
