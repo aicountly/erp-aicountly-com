@@ -33,6 +33,15 @@ def step(prefix):
     raise SystemExit('step not found: ' + prefix)
 
 result(list(on.keys()) == ['workflow_dispatch'], "the only trigger is workflow_dispatch (nothing deploys by itself) -> %s" % list(on.keys()))
+
+# "dry_run" defaults to ticked, so the run everybody gets by accident is the harmless one. The cost is that
+# a dry run and a real deploy look the same in the Actions list afterwards, which has already been read as
+# "it deployed" when it had not. The run's own title has to say which it was.
+rn = str(d.get('run-name', ''))
+result('dry_run' in rn.lower().replace(' ', '_') or 'inputs.dry_run' in rn,
+       "the run's title is decided by dry_run, so the Actions list says which kind of run it was")
+result('DRY RUN' in rn and 'DEPLOY' in rn,
+       "and it names both outcomes in words, not just the flag -> %s" % rn.strip()[:80])
 result('environment' in d['jobs']['deploy'] and d['jobs']['deploy']['environment'] == 'production', "the job runs in the 'production' environment")
 result(not any('secrets.' in str(v) for v in d['jobs']['deploy'].get('env', {}).values()), "no secret in the job-level env (steps get only what they need)")
 

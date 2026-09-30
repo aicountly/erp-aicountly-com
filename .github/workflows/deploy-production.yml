@@ -1,5 +1,11 @@
 name: Deploy to production (cPanel)
 
+# The run's title in the Actions list says which of the two it was, because "dry_run" defaults to
+# ticked and a dry run and a real deploy otherwise look identical there long after the fact.
+run-name: >-
+  ${{ inputs.dry_run && 'DRY RUN - nothing uploaded' || 'DEPLOY - uploading to production' }}
+  (${{ github.ref_name }})
+
 # Manual trigger only. There is deliberately no push or schedule trigger: merging
 # code must never upload to the live ERP by itself. Start it from
 # Actions > "Deploy to production (cPanel)" > Run workflow.
