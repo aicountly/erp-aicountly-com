@@ -478,6 +478,89 @@ ok(str_contains($clean, 'The Balance Sheet tallies'), 'with nothing left for a p
 ok(!str_contains($clean, 'has to be looked at before anyone calls it a genuine difference'),
    'and it does not then talk about a difference to look at');
 
+// =====================================================================================================
+//  PART 3: rule W - every leg on the credit side, GST PAID A/C holding the total of the tax legs
+//  (fixture_sides.sql; the shape found in both audited companies, e.g. K.K. voucher 144587)
+// =====================================================================================================
+$reload('sides');
+$sides = $run('--company 1 --fy 1 --branch 1');
+ok(abs($imb() + 4216.75) < 0.005, 'fixture_sides starts 4,216.75 Cr out of balance', (string)$imb());
+ok(preg_match('/ledger before\s+: debit - credit = 4,216\.75 Cr/', $sides) === 1, 'it reports that ledger before');
+ok(preg_match('/ledger after\s+: debit - credit = 2,606\.75 Cr/', $sides) === 1,
+   'rule W closes 1,610.00 of it and leaves 2,606.75 Cr', substr($sides, (int)strpos($sides, 'RESULT')));
+ok(preg_match('#rows inserted / updated / deleted : 0 / 2 / 0#', $sides) === 1,
+   'it changes two rows and inserts nothing: only a side is wrong', substr($sides, (int)strpos($sides, 'RESULT')));
+ok(substr_count($sides, '[W]') === 2, 'both of them are rule W', (string)substr_count($sides, '[W]'));
+ok(str_contains($sides, 'voucher 51        Dr         402.50  GST PAID A/C   (was Cr 402.50)')
+   && str_contains($sides, 'voucher 52        Dr         402.50  GST PAID A/C   (was Cr 402.50)'),
+   'the amount, account and date are untouched - only the side moves', $sides);
+
+// the reason travels with each row in the CSV, so the accountant sees the evidence rule W acted on
+$csvW = $H . '/sides_w.csv';
+@unlink($csvW);
+$run('--company 1 --fy 1 --branch 1 --csv ' . escapeshellarg($csvW));
+$csvW_text = is_file($csvW) ? (string)file_get_contents($csvW) : '';
+ok(str_contains($csvW_text, 'every leg of this entry was posted on the credit side and GST PAID A/C holds the total of the 2 tax legs (402.50)')
+   && str_contains($csvW_text, 'holds the total of the tax leg (402.50)'),
+   'the reason names the evidence, for one tax leg and for two', $csvW_text);
+ok(substr_count($csvW_text, '"change row",W,') === 2 && substr_count($csvW_text, '"for review"') === 11,
+   'the CSV carries the two changes and the eleven left alone', $csvW_text);
+ok(str_contains($csvW_text, '"change row",W,51,117,"GST PAID A/C",Dr,402.50,Cr,402.50,2025-06-10'),
+   'and records the side each row came from, so a change can be undone by hand', $csvW_text);
+@unlink($csvW);
+
+// the seven it must not touch
+foreach ([53 => '600.00 Dr', 54 => '142.00 Dr', 55 => '802.50 Cr', 56 => '905.00 Cr',
+          57 => '805.00 Cr', 58 => '805.00 Cr', 59 => '177.50 Dr', 60 => '603.75 Cr',
+          61 => '805.00 Cr', 62 => '700.00 Dr', 63 => '500.00 Dr'] as $vW => $diffW) {
+    ok(str_contains($sides, "voucher(s) $vW  difference $diffW"), "voucher $vW is left for a person ($diffW)", $sides);
+}
+ok(preg_match('/entry groups still unbalanced : 11 \(all of them are the ones listed for review: yes\)/', $sides) === 1,
+   'nothing is left unbalanced behind the tool\'s back', substr($sides, (int)strpos($sides, 'RESULT')));
+ok(str_contains($sides, 'every leg of this entry is on the debit side and GST PAID A/C holds the total of its 2 tax legs (300.00)')
+   && str_contains($sides, 'crediting the tax legs makes it a levy, crediting GST PAID A/C makes it the reversal of one'),
+   'the debit-side mirror is named and refused: both readings are legitimate there', $sides);
+ok(str_contains($sides, 'the GST PAID A/C leg is Dr 284.00, exactly twice the 142.00 on its tax leg')
+   && str_contains($sides, 'the GST PAID A/C leg is Dr 355.00, exactly twice the 177.50 on its 2 tax legs')
+   && substr_count($sides, 'either that amount is double or the tax is half, which is an accounting decision') === 2,
+   'the doubled shape (K.K. voucher 143799) is named as a decision, not guessed at', $sides);
+ok(str_contains($sides, '8 entry group(s)       3,526.25 Cr   the stored rows do not show which leg is missing'),
+   'the eight shapes that cannot be characterised still say exactly that', $sides);
+// 60 has GST PAID at twice the tax but on the SAME side, and 61 has a tax leg of 0.00: neither is the
+// doubled shape and neither is the wrong-side shape, so no description may claim them.
+ok(substr_count($sides, 'exactly twice') === 2 && substr_count($sides, 'every leg of this entry is on the debit side') === 1,
+   'only the three shapes that really are named get a name', $sides);
+// 62 and 63 have their tax legs facing each other, which is neither shape whatever the row order
+ok(!str_contains($sides, '(300.00): crediting') || substr_count($sides, 'crediting the tax legs makes it a levy') === 1,
+   'tax legs on opposite sides are never called all-on-one-side', $sides);
+
+// --apply writes the side and nothing else, and only on those two vouchers
+$sidesBefore53 = $rowsOf(53); $sidesBefore57 = $rowsOf(57);
+$sidesApplied = $run('--company 1 --fy 1 --branch 1 --apply');
+ok(str_contains($sidesApplied, 'APPLIED'), 'the plan applies', substr($sidesApplied, -400));
+ok(abs($imb() + 2606.75) < 0.005, 'the ledger is left 2,606.75 Cr out, the figure the dry run promised', (string)$imb());
+ok($rowsOf(51) === ['117:1:402.50', '141:2:201.25', '142:2:201.25'],
+   'voucher 51 is now Dr GST PAID 402.50 against Cr 201.25 + Cr 201.25', implode(' ', $rowsOf(51)));
+ok($rowsOf(52) === ['117:1:402.50', '141:2:402.50'], 'voucher 52 likewise', implode(' ', $rowsOf(52)));
+ok($rowsOf(53) === $sidesBefore53 && $rowsOf(57) === $sidesBefore57,
+   'the vouchers left for review are exactly as they were', implode(' ', $rowsOf(53)) . ' | ' . implode(' ', $rowsOf(57)));
+$sidesRerun = $run('--company 1 --fy 1 --branch 1');
+ok(str_contains($sidesRerun, 'Nothing to change. Every remaining difference needs a person to decide.'),
+   'running it again finds nothing more to do', substr($sidesRerun, -400));
+ok(substr_count($sidesRerun, '[W]') === 0 && abs($imb() + 2606.75) < 0.005,
+   'and it neither repeats nor undoes what it did', (string)$imb());
+
+// the library on its own, which is also what the save path calls
+$reload('sides');
+harness_session(['bo_gstin_type' => 2, 'ses_bostecd' => '09']);
+$cpW = new \App\Libraries\CompositionPosting(harness_db(), 1);
+$planW = $cpW->plan([51, 52, 53, 54]);
+ok(count($planW['actions']) === 2 && count($planW['review']) === 2,
+   'the library plans the two and reviews the two', json_encode([count($planW['actions']), count($planW['review'])]));
+ok(array_column($planW['actions'], 'rule') === ['W', 'W'], 'both actions are rule W', json_encode(array_column($planW['actions'], 'rule')));
+$deltaW = array_sum(array_column($planW['actions'], 'delta'));
+ok(abs($deltaW - 1610.0) < 0.005, 'their deltas add up to the 1,610.00 the run closed', (string)$deltaW);
+
 // ---- if applying the plan does not move the ledger by what the rules planned, it refuses to stand behind it
 // A trigger quietly adds a rupee to every row the repair inserts, so the plan and the effect part company.
 $reload('pairs');

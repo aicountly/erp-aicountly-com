@@ -13,7 +13,7 @@ use Config\Database;
  * credit, and therefore the reason a Balance Sheet or Trial Balance cannot tally.
  *
  * Every change is derived from the rows the vouchers already carry (see App\Libraries\CompositionPosting
- * for the five rules and what each one requires). A difference the stored data cannot explain is listed
+ * for the six rules and what each one requires). A difference the stored data cannot explain is listed
  * for a person to look at and left untouched - nothing is forced, and no balancing figure is invented.
  *
  * It is a DRY RUN unless --apply is given:
@@ -371,6 +371,7 @@ class RepairComposition extends BaseCommand
             'Z' => 'a GST PAID A/C leg posted as 0.00 given the amount that balances the entry',
             'M' => 'the mirror of the tax legs the difference equals, on the same ledgers',
             'S' => 'GST PAID A/C debited with the tax the voucher\'s own GST summary records',
+            'W' => 'a GST PAID A/C leg posted on the credit side with its tax legs moved to the debit side',
             'R' => 'rounding between a tax total and its components',
         ];
         // "closes" is the effect on the ledger, not the size of the row written: correcting a leg from 7,323.75

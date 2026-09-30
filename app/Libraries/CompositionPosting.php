@@ -41,6 +41,11 @@ use Config\Database;
  *      entry to balance is exactly the total tax recorded in the voucher's own GST summary
  *      (`vchgstsumn`), GST PAID A/C is given that amount - it is the account the composition journal
  *      exists to debit, and two stored facts have to agree before anything is written.
+ *   W  every leg of the entry is on the credit side and the GST PAID A/C leg holds exactly the total of
+ *      the tax legs, so the entry has a difference of twice that leg. GST PAID A/C is moved to the debit
+ *      side, which is the shape every balanced entry of this flow has; its amount, account and date are
+ *      untouched. The same thing on the debit side is ambiguous (a levy or the reversal of one) and is
+ *      left for a person.
  *   R  a difference of 0.05 or less on a group that has tax legs is the rounding of the tax breakup
  *      (components rounded per line, the invoice total rounded once) and is added to its largest leg.
  *
@@ -237,6 +242,43 @@ final class CompositionPosting
         return ((int)($r['n'] ?? 0) > 0) ? round((float)$r['t'], 2) : null;
     }
 
+    /**
+     * What shape a voucher group has, for a report that only describes: the correction a rule would make,
+     * or the reason no rule may make one. Returns null unless this class measures the group's difference
+     * exactly as the caller did, so a description is never attached to somebody else's figure - the caller
+     * may filter by date or branch where this class reads the whole voucher.
+     *
+     * @param  array<int,int> $members the group's vouchers (a voucher and whatever it is linked to)
+     * @return array{tag: string, label: string, text: string}|null  'tag' is a few words to hang off another
+     *         label, 'label' groups shapes in a summary of their own, 'text' explains one group in full
+     */
+    public function shapeOf(array $members, float $difference): ?array
+    {
+        $gstPaid = $this->gstPaidAccount();
+        if ($gstPaid === null) { return null; }
+
+        $led = $this->ledger($members);
+        $rowsOf = []; $mine = 0.0;
+        foreach ($members as $v) {
+            $rowsOf[$v] = $led['rows'][$v] ?? [];
+            foreach ($rowsOf[$v] as $r) { $mine += $r['side'] === 1 ? $r['amt'] : -$r['amt']; }
+        }
+        $mine = round($mine, 2);
+        if (abs(round($mine - $difference, 2)) > self::TOLERANCE) { return null; }
+
+        $tax = $this->taxAccounts();
+        $acted = []; $diff = $mine;
+        $add = function (array $a) use (&$acted, &$diff) { $acted[] = $a; $diff = round($diff + ($a['delta'] ?? 0.0), 2); };
+        if ($tax) { $this->ruleWrongSide($members, $rowsOf, $this->headers($members), $gstPaid, $tax, $diff, $add); }
+        if ($acted && abs($diff) <= self::TOLERANCE) {
+            return ['tag'   => 'books:repair-composition corrects this',
+                    'label' => 'every leg on the credit side, GST PAID A/C holding the tax total: books:repair-composition corrects it',
+                    'text'  => 'every leg is on the credit side and GST PAID A/C holds the total of the tax legs:'
+                               . ' books:repair-composition moves that one leg to the debit side'];
+        }
+        return $this->describe($members, $rowsOf, $gstPaid, $tax, $mine);
+    }
+
     // ==================================================================================================
     //  the plan
     // ==================================================================================================
@@ -284,6 +326,9 @@ final class CompositionPosting
                 $this->ruleJournal($members, $rowsOf, $hdr, $gstPaid, $signed, $add);
                 $this->ruleZeroLeg($members, $rowsOf, $hdr, $gstPaid, $diff, $add);
             }
+            if (!$blocked && $gstPaid !== null && $tax) {
+                $this->ruleWrongSide($members, $rowsOf, $hdr, $gstPaid, $tax, $diff, $add);
+            }
             if (!$blocked && $tax) {
                 $this->ruleMirror($members, $rowsOf, $hdr, $tax, $diff, $add);
             }
@@ -295,10 +340,11 @@ final class CompositionPosting
             }
 
             if (!$mine || abs($diff) > self::TOLERANCE) {
-                $review[] = ['group' => $members, 'difference' => $diff, 'blocked' => $blocked,
-                             'why' => $blocked ? 'a leg of this entry is waiting for approval or was rejected'
-                                   : ($mine ? 'only part of the difference could be explained from the stored rows'
-                                            : 'the stored rows do not show which leg is missing')];
+                $shape = $blocked || $mine ? null : $this->describe($members, $rowsOf, $gstPaid, $tax, $diff);
+                $why = $blocked ? 'a leg of this entry is waiting for approval or was rejected'
+                     : ($mine ? 'only part of the difference could be explained from the stored rows'
+                              : ($shape['text'] ?? 'the stored rows do not show which leg is missing'));
+                $review[] = ['group' => $members, 'difference' => $diff, 'blocked' => $blocked, 'why' => $why];
                 continue;
             }
             foreach ($mine as $a) { $actions[] = $a; }
@@ -308,6 +354,80 @@ final class CompositionPosting
         // discount, so most rules stay off and nothing here may be treated as a verdict.
         return ['actions' => $actions, 'fixed' => $fixed, 'review' => $review, 'groups' => count($groups),
                 'degraded' => ($gstPaid === null || !$tax)];
+    }
+
+    /**
+     * Names the shape of a difference no rule may touch, so the review list says what is actually wrong
+     * instead of "a leg is missing". It proposes nothing and writes nothing: where two corrections are
+     * arithmetically equal but land in different places, choosing between them is an accounting decision.
+     */
+    private function describe(array $members, array $rowsOf, ?int $gstPaid, array $tax, float $diff): ?array
+    {
+        if ($gstPaid === null) { return null; }
+
+        $gstRow = null; $gstLegs = 0; $taxTotal = 0.0; $taxLegs = 0; $foreign = 0;
+        foreach ($members as $v) {
+            foreach ($rowsOf[$v] as $r) {
+                if ($r['acc'] === $gstPaid) { $gstLegs++; $gstRow = $r; continue; }
+                if (isset($tax[$r['acc']])) { $taxTotal = round($taxTotal + $r['amt'], 2); $taxLegs++; continue; }
+                $foreign++;
+            }
+        }
+        if ($gstLegs !== 1 || $foreign > 0 || $gstRow === null) { return null; }
+        $drcr = static function (int $side): string { return $side === 1 ? 'Dr' : 'Cr'; };
+
+        // No tax leg at all: the entry is a single GST PAID amount and the account it belongs against is
+        // nowhere in the stored rows, so there is nothing to derive the other leg from.
+        if ($taxLegs === 0) {
+            return ['tag'   => 'the only leg is GST PAID A/C',
+                    'label' => 'the only leg is GST PAID A/C, with nothing to derive the other from',
+                    'text'  => 'the only leg of this entry is ' . $drcr($gstRow['side']) . ' ' . number_format($gstRow['amt'], 2, '.', '')
+                               . ' on GST PAID A/C: the account it belongs against is not in the stored rows'];
+        }
+
+        // Both descriptions below compare GST PAID A/C against the total of the tax legs, which only means
+        // something when those legs are all on one side: tax legs facing each other are a shape of their
+        // own, and $taxSide is 0 for them, so neither description claims to have recognised it.
+        // Every leg on the debit side, GST PAID A/C holding the total of the tax legs: the mirror of rule W.
+        // Crediting the tax legs makes it a levy, crediting GST PAID A/C makes it the reversal of one, and
+        // the stored rows do not say which was meant.
+        $taxSide = $this->sideOfTaxLegs($members, $rowsOf, $gstPaid, $tax);
+        if ($gstRow['side'] === 1 && $taxSide === 1 && $taxTotal > self::TOLERANCE
+            && abs(round($gstRow['amt'] - $taxTotal, 2)) <= self::TOLERANCE) {
+            return ['tag'   => 'every leg on the debit side: a levy or the reversal of one',
+                    'label' => 'every leg on the debit side, GST PAID A/C holding the tax total: a levy or the reversal of one',
+                    'text'  => 'every leg of this entry is on the debit side and GST PAID A/C holds the total of its '
+                               . ($taxLegs === 1 ? 'tax leg' : $taxLegs . ' tax legs') . ' (' . number_format($taxTotal, 2, '.', '')
+                               . '): crediting the tax legs makes it a levy, crediting GST PAID A/C makes it the reversal of one'
+                               . ' - the stored rows do not say which, so it is an accounting decision'];
+        }
+
+        // GST PAID holds twice the levy its tax legs carry. Halving it and doubling a tax leg both balance
+        // the entry, but one moves the profit and the other moves a tax balance, so neither is automatic.
+        if ($taxSide !== 0 && $taxTotal > self::TOLERANCE
+            && abs(round($gstRow['amt'] - 2 * $taxTotal, 2)) <= self::TOLERANCE
+            && $gstRow['side'] !== $taxSide) {
+            return ['tag'   => 'GST PAID A/C is twice its tax legs',
+                    'label' => 'GST PAID A/C holds exactly twice its tax legs: the amount is double, or the tax is half',
+                    'text'  => 'the GST PAID A/C leg is ' . $drcr($gstRow['side']) . ' ' . number_format($gstRow['amt'], 2, '.', '')
+                               . ', exactly twice the ' . number_format($taxTotal, 2, '.', '') . ' on its '
+                               . ($taxLegs === 1 ? 'tax leg' : $taxLegs . ' tax legs')
+                               . ': either that amount is double or the tax is half, which is an accounting decision'];
+        }
+        return null;
+    }
+
+    /** The side every tax leg of the group sits on, or 0 if they are not all on one side. */
+    private function sideOfTaxLegs(array $members, array $rowsOf, int $gstPaid, array $tax): int
+    {
+        $side = 0;
+        foreach ($members as $v) {
+            foreach ($rowsOf[$v] as $r) {
+                if ($r['acc'] === $gstPaid || !isset($tax[$r['acc']])) { continue; }
+                if ($side === 0) { $side = $r['side']; } elseif ($side !== $r['side']) { return 0; }
+            }
+        }
+        return $side;
     }
 
     /** Rule J: the GST PAID row of a composition journal is whatever balances that journal's own legs. */
@@ -383,6 +503,61 @@ final class CompositionPosting
                 return;
             }
         }
+    }
+
+    /**
+     * Rule W: every leg of the entry sits on the credit side, and the GST PAID A/C leg holds exactly the
+     * total of the tax legs - so the GST PAID A/C leg is on the wrong side.
+     *
+     * This flow has one shape: GST PAID A/C is debited with the levy and the tax ledgers are credited with
+     * the same levy, split across them (see the entries at the top of this class). Some entries were
+     * written with GST PAID A/C credited as well, which leaves every leg on the credit side - an entry no
+     * reading of double entry allows - and a difference of exactly twice that leg. Correcting its side
+     * restores the shape every balanced entry of this flow has. Nothing is recalculated: the amount, the
+     * account and the date are the ones already stored, and only one row changes.
+     *
+     * Debiting the tax legs instead would also balance the entry, and would turn it into the reversal of a
+     * levy rather than a levy. Where GST PAID A/C and the tax ledgers sit in the same part of the reports -
+     * as they do in both companies this was built for, all of them Indirect Expenses - the two are
+     * indistinguishable in the profit, the Balance Sheet and the Trial Balance, and differ only in which
+     * expense line carries the amount. Where they do not, the choice matters, which is why this rule asks
+     * two independent facts to agree before it writes: the GST PAID amount equals the total of the tax legs
+     * to the paisa, and moving that one leg closes the whole difference.
+     *
+     * The mirror image - every leg on the DEBIT side - is deliberately not touched. There the two readings
+     * are a levy with its tax legs miswritten and a reversal with GST PAID A/C miswritten, and the stored
+     * rows do not say which, so it is reported for a person to decide.
+     */
+    private function ruleWrongSide(array $members, array $rowsOf, array $hdr, int $gstPaid, array $tax, float $diff, callable $add): void
+    {
+        if ($diff >= -self::TOLERANCE || !$tax) { return; }   // credit-heavy only
+
+        $gstRow = null; $taxTotal = 0.0; $taxLegs = 0;
+        foreach ($members as $v) {
+            foreach ($rowsOf[$v] as $r) {
+                if ($r['side'] !== 2) { return; }             // any debit leg: not this shape
+                if ($r['acc'] === $gstPaid) {
+                    // A second GST PAID leg, or a zero one, is a different shape: leave it alone.
+                    if ($gstRow !== null || $r['amt'] <= self::TOLERANCE) { return; }
+                    $gstRow = $r + ['vch' => $v];
+                    continue;
+                }
+                if (!isset($tax[$r['acc']]) || $r['amt'] <= 0) { return; }   // a leg that is not a GST tax ledger
+                $taxTotal = round($taxTotal + $r['amt'], 2);
+                $taxLegs++;
+            }
+        }
+        if ($gstRow === null || $taxLegs === 0) { return; }
+        if (abs(round($gstRow['amt'] - $taxTotal, 2)) > self::TOLERANCE) { return; }
+        if (abs(round($diff + 2 * $gstRow['amt'], 2)) > self::TOLERANCE) { return; }
+
+        $add(['kind' => 'update_row', 'rule' => 'W', 'vch' => $gstRow['vch'], 'row' => $gstRow['id'], 'acc' => $gstPaid,
+              'side' => 1, 'amount' => $gstRow['amt'], 'was_side' => 2, 'was_amount' => $gstRow['amt'],
+              'delta' => 2 * $gstRow['amt'], 'date' => $gstRow['date'], 'bo' => $gstRow['bo'],
+              'register' => (int)($hdr[$gstRow['vch']]['type'] ?? 0) === self::JOURNAL_TYPE,
+              'why' => 'every leg of this entry was posted on the credit side and GST PAID A/C holds the total of the '
+                       . ($taxLegs === 1 ? 'tax leg' : $taxLegs . ' tax legs') . ' (' . number_format($taxTotal, 2, '.', '')
+                       . '): debiting GST PAID A/C is the shape this flow posts and balances the entry']);
     }
 
     /** Rule M: the difference equals the tax legs on the heavy side, so the mirror legs are missing. */

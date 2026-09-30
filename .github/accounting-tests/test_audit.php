@@ -91,6 +91,32 @@ ok(preg_match('/the credit legs on CGST X\s+1\s+300\.00 Cr/', $outG) === 1 && ($
 ok(($rowsG[53]['group_difference_equals'] ?? '') === 'Dr GST PAID A/C 1,800.00  OR  Dr CGST X 900.00 + SGST X 900.00', 'csv: voucher 53 lists both alternatives', json_encode($rowsG[53] ?? null));
 ok(($rowsG[52]['group_difference_equals'] ?? '') === 'Cr CGST INPUT 355.00 + SGST INPUT 355.00 [the GST PAID A/C debit leg of this group is 0.00]' && ($rowsG[52]['linked_voucher_ids'] ?? '') === '51', 'csv: voucher 52 (journal linked to the sale by link type 4) - the two tax credits, zero GST PAID debit', json_encode($rowsG[52] ?? null));
 
+// ---- the shapes GST PAID A/C entries come in, named by the same library the repair uses (fixture_sides.sql) -------------
+sh("cd " . escapeshellarg($H) . " && ./reload_db.sh sides");
+$sidesOut = sh("cd " . escapeshellarg($H) . " && php run_audit.php --company 1 --fy 1 --branch 1 --no-excel --no-legacy --no-continuity");
+ok(str_contains($sidesOut, 'Total debit - total credit of all posted rows = 4,216.75 Cr'),
+   'sides: the audit measures the same 4,216.75 Cr the repair does', $sidesOut);
+ok(preg_match('/\(GST PAID A\/C holds exactly twice its tax legs: the amount is double, or the tax is half\)\s+2\s+319\.50 Dr/', $sidesOut) === 1,
+   'sides: the doubled shape is named in the summary instead of being called a missing leg', $sidesOut);
+ok(substr_count($sidesOut, 'no combination of up to 3 legs equals it: a leg is missing') === 1,
+   'sides: only the shapes that really cannot be characterised are left unnamed', $sidesOut);
+// the summary column is narrow, so the sentence each shape carries is checked where it is printed in full
+$sidesVch = sh("cd " . escapeshellarg($H) . " && php run_audit.php --company 1 --fy 1 --branch 1 --no-excel --no-legacy --no-continuity --voucher 51,53,54");
+ok(str_contains($sidesVch, 'Cr GST PAID A/C 402.50 + CGST INPUT A/C 201.25 + SGST INPUT A/C 201.25 - every leg is on the credit side'
+   . ' and GST PAID A/C holds the total of the tax legs: books:repair-composition moves that one leg to the debit side'),
+   'sides: voucher 51 is told which command corrects it, so the reader knows it needs no decision', $sidesVch);
+ok(str_contains($sidesVch, 'every leg of this entry is on the debit side and GST PAID A/C holds the total of its 2 tax legs (300.00):'
+   . ' crediting the tax legs makes it a levy, crediting GST PAID A/C makes it the reversal of one'),
+   'sides: voucher 53 is told both readings are open', $sidesVch);
+ok(str_contains($sidesVch, 'the GST PAID A/C leg is Dr 284.00, exactly twice the 142.00 on its tax leg:'
+   . ' either that amount is double or the tax is half, which is an accounting decision'),
+   'sides: voucher 54 is named as the doubled shape, not as a missing leg', $sidesVch);
+// the audit only describes: nothing it says here may change a row
+ok(abs((float)trim(sh($psql . ' -c ' . escapeshellarg(
+       "SELECT COALESCE(SUM(CASE WHEN acc_txn_dr_cr=1 THEN acc_txn_amt ELSE -acc_txn_amt END),0) FROM accttxnmst
+          WHERE cmp_id=1 AND acc_txn_type=1 AND vch_txn_id>0 AND acc_txn_date BETWEEN '2025-04-01' AND '2026-03-31'"))) + 4216.75) < 0.005,
+   'sides: naming the shapes left every row exactly as it was', 'the ledger moved');
+
 // ---- linked vouchers: composition-scheme purchase + its GST PAID A/C system journal (fixture_pairs.sql) ----------------------
 sh("cd " . escapeshellarg($H) . " && ./reload_db.sh pairs");
 $before = $digest();
@@ -115,7 +141,8 @@ ok(preg_match('/11 Purchase \(no linked voucher\)\s+3\s+6,500\.00 Cr/', $out) ==
 ok(preg_match('/the credit legs on CGST INPUT A\/C \+ SGST INPUT A\/C\s+1\s+1,800\.00 Cr/', $out) === 1, 'the difference of the linked pair 35+36 equals the credit legs on CGST INPUT + SGST INPUT (1,800.00)');
 ok(preg_match('/the credit legs on Central Tax \(Output\) \+ State Tax \(Output\)\s+1\s+2,400\.00 Cr/', $out) === 1, 'the difference of the self-linked purchase 37 equals the credit legs on Central Tax + State Tax (2,400.00)');
 ok(preg_match('/the credit legs on CESS INPUT A\/C \+ CGST INPUT A\/C \+ SGST INPUT A\/C\s+1\s+2,000\.00 Cr/', $out) === 1, 'the difference of purchase 40 equals THREE credit legs (CGST + SGST + cess = 2,000.00)');
-ok(preg_match('/the debit legs on GST PAID A\/C\s+1\s+500\.00 Dr/', $out) === 1, 'the single-sided journal 27 equals its debit to GST PAID A/C (500.00)');
+ok(preg_match('/the debit legs on GST PAID A\/C \(the only leg is GST PAID A\/C\)\s+1\s+500\.00 Dr/', $out) === 1,
+   'the single-sided journal 27 equals its debit to GST PAID A/C (500.00), and is named as the shape it is', $out);
 ok(preg_match('/\(no combination of up to 3 legs equals it: a leg is missing\)\s+5\s+10,080\.00 Cr/', $out) === 1, 'five groups have no combination of legs that equals the difference: a leg is missing (10,080.00)');
 ok(preg_match('/CGST INPUT A\/C\s+yes\s+Cr 1,800\.00 in 2 group\(s\)\s+1,800\.00 Cr\s+Duties & Taxes \/ Current Liabilities/', $out) === 1, 'the accounts behind the legs: CGST INPUT A/C is a bill-sundry (tax) ledger, credited 1,800.00 in 2 groups, closing 1,800.00 Cr, placed under Duties & Taxes / Current Liabilities');
 ok(preg_match('/GST PAID A\/C\s+Dr 500\.00 in 1 group\(s\)\s+13,360\.00 Dr\s+\(primary account\) \/ Indirect Expenses/', $out) === 1, 'the accounts behind the legs: GST PAID A/C (an Indirect Expenses ledger) with its closing balance');
@@ -148,7 +175,9 @@ ok(($rows[21]['status'] ?? '') === 'balances together with linked voucher' && ($
    && ($rows[21]['largest_leg_account'] ?? '') === 'ABC Suppliers' && ($rows[21]['gst_summary_total_tax'] ?? '') === '1800.00' && ($rows[21]['supplier_bill_no'] ?? '') === 'INV-101', 'csv: voucher 21 row', json_encode($rows[21] ?? null));
 ok(($rows[23]['status'] ?? '') === 'STILL UNBALANCED with linked voucher' && ($rows[23]['group_diff'] ?? '') === '-4500.00', 'csv: voucher 23 still unbalanced with its journal', json_encode($rows[23] ?? null));
 ok(($rows[25]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['status'] ?? '') === 'STILL UNBALANCED (no linked voucher)' && ($rows[27]['diff_debit_minus_credit'] ?? '') === '500.00'
-   && ($rows[27]['group_difference_equals'] ?? '') === 'Dr GST PAID A/C 500.00', 'csv: vouchers without a link; the single-sided journal equals its debit to GST PAID A/C', json_encode([$rows[25] ?? null, $rows[27] ?? null]));
+   && ($rows[27]['group_difference_equals'] ?? '') === 'Dr GST PAID A/C 500.00 - the only leg of this entry is Dr 500.00 on GST PAID A/C: the account it belongs against is not in the stored rows',
+   'csv: vouchers without a link; the single-sided journal equals its debit to GST PAID A/C, and says nothing can be derived from it',
+   json_encode([$rows[25] ?? null, $rows[27] ?? null]));
 ok(($rows[29]['status'] ?? '') === 'STILL UNBALANCED (linked voucher in another year)', 'csv: linked voucher in another year', json_encode($rows[29] ?? null));
 ok(($rows[35]['status'] ?? '') === 'STILL UNBALANCED with linked voucher' && ($rows[35]['group_difference_equals'] ?? '') === 'Cr CGST INPUT A/C 900.00 + SGST INPUT A/C 900.00' && ($rows[35]['linked_voucher_ids'] ?? '') === '36', 'csv: voucher 35 (linked journal balances by itself) - the difference equals the two tax credits', json_encode($rows[35] ?? null));
 ok(($rows[37]['status'] ?? '') === 'STILL UNBALANCED (journal rows inside the voucher)' && ($rows[37]['group_difference_equals'] ?? '') === 'Cr Central Tax (Output) 1,200.00 + State Tax (Output) 1,200.00', 'csv: voucher 37 (self-linked) - journal rows inside the voucher', json_encode($rows[37] ?? null));
