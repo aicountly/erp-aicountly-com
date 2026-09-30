@@ -905,31 +905,45 @@ class AuditBooks extends BaseCommand
             $rec['narration'] = $text;
         }
         $rec['rows'] = $this->printRows($id);
-        // The register is written beside the ledger from the same entry. When it carries an account the ledger
-        // does not, it is the only record of the leg that never reached accttxnmst, so the rows are listed in
-        // full and compared with the ledger rather than merely counted.
+        // The register is written beside the ledger from the same entry, so when it carries an account the
+        // ledger does not, it is the only record of the leg that never reached accttxnmst. Installations
+        // differ in what acctvchreg holds, so every column is read and printed as it comes rather than a
+        // fixed set being assumed: a register that is shaped differently still shows what it knows.
         $reg = $this->optional(fn() => $this->db->query(
-            'SELECT r.acct_vch_type t, r.acc_id, m.acc_name, COALESCE(r.acc_txn_dr_amt,0) dr, COALESCE(r.acc_txn_cr_amt,0) cr, r.acc_txn_type at
-               FROM acctvchreg r LEFT JOIN acctmaster m ON m.acc_id = r.acc_id AND m.cmp_id = r.cmp_id
-              WHERE r.cmp_id = ? AND r.vch_txn_id = ? ORDER BY r.acct_vch_type, r.acc_id', [$this->cmp, $id])->getResultArray());
+            'SELECT * FROM acctvchreg WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 50', [$this->cmp, $id])->getResultArray());
         if ($reg) {
-            $rdr = $rcr = 0.0;
-            CLI::write('         register (acctvchreg), ' . count($reg) . ' row(s):');
+            $key = function (array $row, string ...$wanted): ?string {       // a column of that name, whatever its case
+                foreach ($row as $k => $_) { foreach ($wanted as $w) { if (strcasecmp((string)$k, $w) === 0) { return (string)$k; } } }
+                return null;
+            };
+            $accK  = $key($reg[0], 'acc_id', 'account_id');
+            $names = $accK !== null ? $this->accNames(array_column($reg, $accK)) : [];
+            CLI::write('         register (acctvchreg), ' . count($reg) . ' row(s), columns: ' . implode(', ', array_keys($reg[0])));
             foreach (array_slice($reg, 0, 12) as $r) {
-                $rdr += (float)$r['dr']; $rcr += (float)$r['cr'];
-                CLI::write(sprintf('            type %-3s Dr %14s  Cr %14s   %s (acc %s)', $r['t'], $this->n((float)$r['dr']), $this->n((float)$r['cr']),
-                    trim((string)($r['acc_name'] ?? '(no account master row)')), $r['acc_id']));
+                $bits = [];
+                foreach ($r as $k => $v) {
+                    if ($v === null || $v === '' || in_array(strtolower((string)$k), ['cmp_id', 'vch_txn_id'], true)) { continue; }
+                    $val = trim(preg_replace('/\s+/', ' ', strip_tags((string)$v)));
+                    if ($val === '' || $val === '0' || $val === '0.00') { continue; }
+                    $bits[] = $k . '=' . mb_substr($val, 0, 40);
+                }
+                $who = ($accK !== null && isset($names[(int)$r[$accK]])) ? '   ' . $names[(int)$r[$accK]] : '';
+                CLI::write('            ' . implode('  ', $bits) . $who);
             }
             if (count($reg) > 12) { CLI::write('            ... and ' . (count($reg) - 12) . ' more'); }
-            CLI::write(sprintf('            register total: debit %s   credit %s   difference %s', $this->n($rdr), $this->n($rcr), $this->drcr(round($rdr - $rcr, 2))), 'light_gray');
             $rec['register'] = $reg;
-            $inLedger = [];
-            foreach ($rec['rows'] ?? [] as $r) { $inLedger[(int)$r['acc_id']] = true; }
-            $only = [];
-            foreach ($reg as $r) { if (!isset($inLedger[(int)$r['acc_id']])) { $only[] = trim((string)($r['acc_name'] ?? '')) . ' (acc ' . $r['acc_id'] . ')'; } }
-            if ($only) {
-                CLI::write('            accounts in the register that have no ledger row in this voucher: ' . implode(', ', array_unique($only)), 'yellow');
-                $rec['register_only_accounts'] = array_values(array_unique($only));
+            if ($accK !== null) {
+                $inLedger = [];
+                foreach ($rec['rows'] ?? [] as $lr) { $inLedger[(int)$lr['acc_id']] = true; }
+                $only = [];
+                foreach ($reg as $r) {
+                    $a = (int)$r[$accK];
+                    if ($a > 0 && !isset($inLedger[$a])) { $only[] = ($names[$a] ?? '(not in the account master)') . ' (acc ' . $a . ')'; }
+                }
+                if ($only) {
+                    CLI::write('            accounts in the register that have no ledger row in this voucher: ' . implode(', ', array_unique($only)), 'yellow');
+                    $rec['register_only_accounts'] = array_values(array_unique($only));
+                }
             }
         }
         $bill = $this->optional(fn() => $this->db->query('SELECT inwsup_bill_ref_no b FROM gstrinwsup WHERE cmp_id = ? AND vch_txn_id = ? LIMIT 1', [$this->cmp, $id])->getRowArray());
@@ -982,6 +996,18 @@ class AuditBooks extends BaseCommand
     }
 
     /** Prints the ledger rows of one voucher; returns them. @return array<int,array<string,mixed>> */
+    /** Ledger names for a set of account ids, for tables that store only the id. @return array<int,string> */
+    private function accNames(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) { return []; }
+        $rows = $this->optional(fn() => $this->db->table('acctmaster')->select('acc_id, acc_name')
+            ->where('cmp_id', $this->cmp)->whereIn('acc_id', $ids)->get()->getResultArray());
+        $out = [];
+        foreach ($rows ?: [] as $r) { $out[(int)$r['acc_id']] = trim(strip_tags((string)$r['acc_name'])); }
+        return $out;
+    }
+
     private function printRows(int $id, string $pad = '         '): array
     {
         $rows = $this->optional(fn() => $this->db->query(
