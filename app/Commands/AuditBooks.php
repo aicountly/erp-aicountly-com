@@ -1174,6 +1174,74 @@ class AuditBooks extends BaseCommand
         $this->check('open_diff', abs($diff) < 0.01 ? 'OK' : 'WARN', abs($diff) < 0.01 ? 'Opening balances (ledgers + opening stock) net to zero.' : "'Difference in Opening' (ledger openings + opening stock) = " . $this->drcr($diff) . ' - the opening data of this year does not balance.');
         $this->R['openings']['difference'] = $diff;
 
+        // Opening stock is kept as two rows in two tables - the quantity in itmoppybal, the
+        // value in itmoppyval - and nothing holds them together, so they drift apart.
+        //   value with no quantity: not stock. The reports no longer count it, so whatever a
+        //     ledger opening still carries against it lands in 'Difference in Opening' above.
+        //     Either the quantity is missing and should be entered, or the value is phantom
+        //     and the ledger opening behind it needs the same correction.
+        //   quantity with no value: the opposite trap. The weighted average starts at nil, so
+        //     every issue of that item is relieved at nil and the stock never costs anything.
+        $widows = $this->db->query(
+            "SELECT t.itm_id_unit_id, t.hobo_id, t.val, t.qty FROM (
+                 SELECT v.itm_id_unit_id, v.hobo_id, SUM(v.itm_op_val_amt) AS val,
+                        (SELECT COALESCE(SUM(b.itm_op_bal_qty),0) FROM itmoppybal b
+                          WHERE b.cmp_id = v.cmp_id AND b.cmpfymastr_id = v.cmpfymastr_id
+                            AND b.hobo_id = v.hobo_id AND b.itm_id_unit_id = v.itm_id_unit_id) AS qty
+                   FROM itmoppyval v
+                  WHERE v.cmp_id = ? AND v.cmpfymastr_id = ?
+                  GROUP BY v.cmp_id, v.cmpfymastr_id, v.hobo_id, v.itm_id_unit_id
+             ) t
+             WHERE ABS(t.val) >= 0.005 AND t.qty <= 0
+             ORDER BY ABS(t.val) DESC",
+            [$this->cmp, $this->fy]
+        )->getResultArray();
+
+        $widowSum = 0.0;
+        foreach ($widows as $w) { $widowSum += (float)$w['val']; }
+        $this->R['openings']['value_without_qty'] = ['count' => count($widows), 'total' => round($widowSum, 2)];
+
+        if ($widows) {
+            $this->check('open_stock_widow_value', 'WARN', count($widows) . ' item(s) open with a VALUE but no quantity, ' . $this->n($widowSum)
+                . ' in all. No report counts this as stock, so it is part of the '
+                . "'Difference in Opening' above until either the quantity is entered or the ledger opening behind it is corrected:");
+            $rows = [];
+            foreach ($widows as $w) {
+                $rows[] = ['item' => $w['itm_id_unit_id'], 'bo' => $w['hobo_id'],
+                           '>opening value' => $this->n((float)$w['val']), '>opening qty' => $this->n((float)$w['qty'])];
+            }
+            $this->table($rows, ['item' => 'itm_id_unit_id', 'bo' => 'branch', '>opening value' => '>opening value', '>opening qty' => '>opening qty'], $this->limit);
+        } else {
+            $this->check('open_stock_widow_value', 'OK', 'Every opening stock value has an opening quantity behind it.');
+        }
+
+        $noValue = $this->db->query(
+            "SELECT t.itm_id_unit_id, t.hobo_id, t.qty, t.val FROM (
+                 SELECT b.itm_id_unit_id, b.hobo_id, SUM(b.itm_op_bal_qty) AS qty,
+                        (SELECT COALESCE(SUM(v.itm_op_val_amt),0) FROM itmoppyval v
+                          WHERE v.cmp_id = b.cmp_id AND v.cmpfymastr_id = b.cmpfymastr_id
+                            AND v.hobo_id = b.hobo_id AND v.itm_id_unit_id = b.itm_id_unit_id) AS val
+                   FROM itmoppybal b
+                  WHERE b.cmp_id = ? AND b.cmpfymastr_id = ?
+                  GROUP BY b.cmp_id, b.cmpfymastr_id, b.hobo_id, b.itm_id_unit_id
+             ) t
+             WHERE t.qty > 0 AND ABS(t.val) < 0.005
+             ORDER BY t.qty DESC",
+            [$this->cmp, $this->fy]
+        )->getResultArray();
+
+        $this->R['openings']['qty_without_value'] = ['count' => count($noValue)];
+        if ($noValue) {
+            $this->check('open_stock_no_value', 'WARN', count($noValue) . ' item(s) open with a QUANTITY but no value. Their weighted average starts at nil, so every issue is relieved at nil cost and the item shows stock that is worth nothing:');
+            $rows = [];
+            foreach ($noValue as $w) {
+                $rows[] = ['item' => $w['itm_id_unit_id'], 'bo' => $w['hobo_id'], '>opening qty' => $this->n((float)$w['qty'])];
+            }
+            $this->table($rows, ['item' => 'itm_id_unit_id', 'bo' => 'branch', '>opening qty' => '>opening qty'], $this->limit);
+        } else {
+            $this->check('open_stock_no_value', 'OK', 'Every opening stock quantity has an opening value behind it.');
+        }
+
         $pl = [];
         foreach ($s->accounts as $a) { if (AccountingEngine::isPlCat((int)$a['cat']) && abs($a['op']) >= 0.005) { $pl[] = $a; } }
         usort($pl, fn($x, $y) => abs($y['op']) <=> abs($x['op']));
