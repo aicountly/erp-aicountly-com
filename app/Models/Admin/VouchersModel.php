@@ -5104,10 +5104,23 @@ private function generatePrefixSuffix($pattern, $separator, $renum_freq, $vouche
 		$m = strtoupper(trim($method));
 		return in_array($m, ['AVG','FIFO','LIFO'], true) ? $m : 'AVG';
 	}
+	/**
+	 * Flag the inventory valuation snapshots a back-dated voucher invalidates.
+	 *
+	 * itmsnapsht lives in the snapshot database (externaldb::postgr_cron_db) -- the one
+	 * the snapshot cron writes to -- not in the global books database (postgr_db), which
+	 * only holds things like drftvchrec.
+	 *
+	 * This is cache invalidation. If it cannot run, the snapshot just stays stale until
+	 * the next cron pass rebuilds it, so a failure here must never abort the voucher save.
+	 */
 	function markSnapshotDirty($date){
-		$postgr_db = $this->externaldb->postgr_db();
+	  try {
+		$postgr_db = $this->externaldb->postgr_cron_db();
 		$cmpId  = $this->company_id;
 		$d   = new \DateTimeImmutable($date);
+		// Normalise before binding: PostgreSQL reads a bare 31-03-2026 as MDY and errors.
+		$dStr = $d->format('Y-m-d');
         $fyS = $this->fyStartFor($d)->format('Y-m-d');
         $fyE = $this->fyEndFor($d)->format('Y-m-d');
 		$key='';
@@ -5117,7 +5130,7 @@ private function generatePrefixSuffix($pattern, $separator, $renum_freq, $vouche
 		$methods = array_map(fn($m)=> strtoupper(trim((string)$m)), $mids);
 
 		// Params (cmp/fy/date first, then methods)
-		$params = array_merge([$cmpId, $fyS, $fyE, $date], $methods);
+		$params = array_merge([$cmpId, $fyS, $fyE, $dStr], $methods);
 
 		// Make placeholders for the ARRAY[...] part
 		$ph = implode(',', array_fill(0, count($methods), '?'));
@@ -5131,7 +5144,10 @@ private function generatePrefixSuffix($pattern, $separator, $renum_freq, $vouche
         if ($key) { $sql .= " AND itm_id_unit_id = ?"; $params[] = $key; }
 
         $postgr_db->query($sql, $params);
-		SaveErrorLog($postgr_db->getlastquery());
+	  } catch (\Throwable $e) {
+		log_message('error', 'markSnapshotDirty failed for '.$date.': '.$e->getMessage());
+		SaveErrorLog('markSnapshotDirty failed for '.$date.': '.$e->getMessage());
+	  }
 	}  
    
 }

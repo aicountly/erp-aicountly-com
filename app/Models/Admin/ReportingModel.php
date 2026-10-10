@@ -984,7 +984,7 @@ private function fetchTxnsWithVoucherInfo($mysql, int $cmpId, int $boId, string 
 
 public function closingStockTotaldddd($from_date,$to_date){
 		$mysql = $this->db;
-		$pg    = $this->externaldb->postgr_db();
+		$pg    = $this->externaldb->postgr_cron_db();
 
 		// === context (use the same way you set these elsewhere) ===
 		$cmpId = $this->company_id;  $boId = $this->bo_id;  $fyId = $this->fy_id;
