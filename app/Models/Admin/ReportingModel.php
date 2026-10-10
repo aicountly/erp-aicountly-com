@@ -709,6 +709,29 @@ public function openingStockTotal($opening_date_ymd, $cmp_id, $cmpfymasr_id, $it
             $qb->where('v.itm_val_method_id', $methodNormalized);
         }
 
+        // Count an item's opening VALUE only where an opening QUANTITY stands behind it.
+        // itmoppyval and itmoppybal are separate tables and do drift apart; a value row
+        // left without its quantity row is not stock, and summing it here charged the
+        // Profit & Loss an opening cost for goods that were never on hand, inflated the
+        // Balance Sheet and the Trial Balance, and disagreed with the closing valuation,
+        // which settles value to nil once the quantity is nil
+        // (StockStatusModel::computeValuation). Both ends now read the same rule.
+        // Scoped like StockStatusModel::loadOpenings(): quantity is summed over every
+        // material centre, so no mat_cent_id filter goes on this subquery.
+        $qtyBacked = $this->db->table('itmoppybal b')
+            ->select('b.itm_id_unit_id')
+            ->where('b.cmp_id', (int)$cmp_id)
+            ->where('b.cmpfymastr_id', (int)$cmpfymasr_id)
+            ->groupBy('b.itm_id_unit_id')
+            ->having('SUM(b.itm_op_bal_qty) > 0', null, false);
+        if ($isConsolidated === 0) {
+            $hoboIdForQty = $filters['hobo_id'] ?? ($this->bo_id ?? null);
+            if (!empty($hoboIdForQty)) {
+                $qtyBacked->where('b.hobo_id', (int)$hoboIdForQty);
+            }
+        }
+        $qb->whereIn('v.itm_id_unit_id', $qtyBacked);
+
         $row   = $qb->get()->getRowArray();
         $total = (float)($row['total'] ?? 0.0);
         return function_exists('parseAmount') ? parseAmount($total) : $total;
