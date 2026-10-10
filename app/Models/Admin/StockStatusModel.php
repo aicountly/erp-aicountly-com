@@ -626,7 +626,13 @@ class StockStatusModel extends Model {
         $closingQty   = (float)($running_qty);
         $closingValue = parseAmount($running_value);
 
-        $isZeroRecord = (abs($closingQty) < 0.001 && abs($closingValue) < 0.01);
+        // Nothing left at the close - but an item that OPENED with stock and sold out
+        // still has to appear while the opening columns are on screen, or the opening
+        // total has no rows to add up to: the screen would foot to nil under a total
+        // reading lakhs, which is what it did.
+        $hasOpening   = (abs((float)$opQty) >= 0.001 || abs((float)$opVal) >= 0.01);
+        $isZeroRecord = (abs($closingQty) < 0.001 && abs($closingValue) < 0.01)
+                        && !($showOpening && $hasOpening);
 
         $rowData = [
             'itm_id_unit_id'     => $key,
@@ -1407,6 +1413,18 @@ private function findItemKeysForReport($mysql, int $cmpId, int $boId, int $fyId,
     $vmap = [];
     foreach ($vRows as $r) {
         $vmap[$r['itm_id_unit_id']] = (float)$r['val_sum'];
+    }
+
+    // Value follows quantity at the opening exactly as it does at the close: an opening
+    // VALUE with no opening QUANTITY behind it is not opening stock. itmoppyval and
+    // itmoppybal are two tables that can drift apart, and when they do, leaving the
+    // widow value in would make "Total Opening Value" disagree with the valuation
+    // beneath it -- and the Profit & Loss charge an opening cost for goods that were
+    // never there.
+    foreach ($vmap as $k => $v) {
+        if (($qmap[$k] ?? 0.0) <= 0.0) {
+            $vmap[$k] = 0.0;
+        }
     }
 
     return [$qmap, $vmap];
