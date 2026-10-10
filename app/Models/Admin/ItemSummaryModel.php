@@ -497,7 +497,7 @@ public function parseNumeric($value)
 
    private function findCleanSnapshotOnOrBefore(string $date_ymd, array $p): ?array
 {
-    $pg = $this->externaldb->postgr_db();
+    $pg = $this->externaldb->postgr_cron_db();
 
     $qb = $pg->table('itmsnapsht s')
         ->select('s.itm_snapshot_date, s.itm_snapshot_is_dirty, s.itm_snapshot_value, s.itm_snapshot_pnl, s.itm_balls_snapshot')
@@ -589,7 +589,7 @@ private function expandIndianFyFromDate(string $anchorYmd): array
 {
     // Build valuation state for THIS item only; compute cl_qty, cl_value and cumulative P&L.
     $mysql   = $this->db;
-    $pg      = $this->externaldb->postgr_db();
+    $pg      = $this->externaldb->postgr_cron_db();
     $cmpId   = $this->company_id;
     $boId    = $this->bo_id;
     $itmKey  = $p['itm_id_unit_id'];
@@ -714,7 +714,7 @@ private function expandIndianFyFromDate(string $anchorYmd): array
 	public function closingStockTotal($from_date, $to_date, $filters)
 {
     $mysql = $this->db;
-    $pg    = $this->externaldb->postgr_db();
+    $pg    = $this->externaldb->postgr_cron_db();
 
     $cmpId = $this->company_id;  $boId = $this->bo_id;  $fyId = $this->fy_id;
 

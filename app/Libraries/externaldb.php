@@ -79,6 +79,8 @@ class externaldb {
 }
 
 
+ // Global books PostgreSQL DB: drafts (drftvchrec) and friends.
+ // The inventory snapshot tables are NOT here -- see postgr_cron_db().
  function postgr_db() {
     $config['DSN']      = '';
     $config['hostname'] = '127.0.0.200';
@@ -102,6 +104,8 @@ class externaldb {
     return $comp_db;
 }
 
+// Inventory snapshot DB: owns itmsnapsht and itmsnap_cronlog. Every reader and
+// writer of those two tables -- the cron and the app alike -- must come through here.
 function postgr_cron_db() {
     $config['DSN']      = '';
     $config['hostname'] = '127.0.0.200';

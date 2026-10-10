@@ -36,7 +36,7 @@ class ErpCronJobDashboard extends BaseController
 	} 
     public function ajax_daily_log()
     {
-        $pg      = $this->externaldb->postgr_db();
+        $pg      = $this->externaldb->postgr_cron_db();
         $runDate = $this->request->getVar('run_date');
 		$cmpId = $this->request->getVar('company_id');
         if (!$runDate) return $this->json_encode(['ok'=>false,'error'=>'run_date required']);

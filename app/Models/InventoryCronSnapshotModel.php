@@ -152,7 +152,7 @@ public function __construct() {
     // Back-dated txn ⇒ mark dirty from txn date → FY end (only that FY & company)
     public function markDirtyTxn()
     {
-        $pg     = Database::connect('pg');
+        $pg     = $this->externaldb->postgr_cron_db();
         $cmpId  = (int)($this->request->getVar('cmp_id') ?? 0);
         $date   = $this->request->getVar('dirty_date');
         $key    = $this->request->getVar('item_id_unit_id'); // optional
@@ -188,7 +188,7 @@ public function __construct() {
     // Opening change ⇒ mark entire FY dirty (only that FY & company)
     public function markDirtyOpeningFY()
     {
-        $pg     = Database::connect('pg');
+        $pg     = $this->externaldb->postgr_cron_db();
         $cmpId  = (int)($this->request->getVar('cmp_id') ?? 0);
         $fyDate = $this->request->getVar('fy_date');
         $key    = $this->request->getVar('item_id_unit_id'); // optional
@@ -203,8 +203,8 @@ public function __construct() {
         $mids = ($method === 'ALL') ? ['AVG','FIFO','LIFO'] : [ $this->methodId($method) ];
 		$methods = array_map(fn($m)=> strtoupper(trim((string)$m)), $mids);
 
-		// Params (cmp/fy/date first, then methods)
-		$params = [$cmpId, $fyS, $fyE];
+		// Params (cmp/fy first, then methods)
+		$params = array_merge([$cmpId, $fyS, $fyE], $methods);
 
 		// Make placeholders for the ARRAY[...] part
 		$ph = implode(',', array_fill(0, count($methods), '?'));
