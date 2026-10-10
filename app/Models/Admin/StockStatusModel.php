@@ -5,6 +5,13 @@ use App\Libraries\externaldb;
 use App\Models\CommonModel;
 
 class StockStatusModel extends Model {
+    /**
+     * Quantities below this are float dust, not stock. The report already rounds
+     * quantity to 4 decimals and treats a row as nil at 0.001, so 1e-9 is well
+     * clear of any quantity a user can enter.
+     */
+    private const QTY_EPSILON = 1e-9;
+
     protected $externaldb;
     protected $univerpaic_db;
     protected $aicountly_db;
@@ -63,6 +70,31 @@ class StockStatusModel extends Model {
         $running_avg   = ($opQty > 0 && $opVal > 0) ? ($opVal / $opQty) : 0.0;
         $total_profit  = 0.0;
 
+        // Under weighted average the value on hand is the cost carried BY the quantity on
+        // hand: the two are one balance seen twice, not two balances. Nothing below may
+        // leave value standing against no stock, because nothing afterwards can relieve it
+        // -- the average is zero once the quantity is gone, so every later issue costs
+        // nothing, and the year-end roll-over copies the orphan into the next year's
+        // opening for ever.
+        $settleToQty = static function (float &$qty, float &$val, float &$avg): void {
+            if ($qty <= self::QTY_EPSILON) {   // nothing on hand: no value, no average
+                $qty = ($qty > -self::QTY_EPSILON) ? 0.0 : $qty;   // tidy away float dust at zero
+                $val = 0.0;
+                $avg = 0.0;
+            }
+        };
+
+        // The cost of an issue is qty x average, EXCEPT for the issue that clears the
+        // stock: that one relieves every rupee still carried, which is what keeps the
+        // value from drifting away from the quantity when the average is stale.
+        $costOfIssue = static function (float $outQty, float $qty, float $val, float $avg): float {
+            return ($outQty >= $qty - self::QTY_EPSILON) ? $val : ($outQty * $avg);
+        };
+
+        // An opening value that arrived without an opening quantity is not stock. It is
+        // written off here, in the year it is found, rather than shown as closing stock.
+        $settleToQty($running_qty, $running_value, $running_avg);
+
         // Group transactions by voucher
         $voucher_groups = [];
         foreach ($txns as $t) {
@@ -93,7 +125,7 @@ class StockStatusModel extends Model {
             $is_stock_journal = (strtolower($vg['voucher_type']) === 'stock journal' || $vg['vch_type_id'] == '20');
 
             if ($is_stock_journal && $vg['in_qty'] > 0 && $vg['out_qty'] > 0) {
-                $cogs = $vg['out_qty'] * $running_avg;
+                $cogs = $costOfIssue($vg['out_qty'], $running_qty, $running_value, $running_avg);
 
                 if ($trackProfit && abs($vg['out_qty'] - $vg['in_qty']) < 0.001) {
                     $total_profit += ($cogs - $vg['in_amt']);
@@ -101,6 +133,8 @@ class StockStatusModel extends Model {
 
                 $running_qty   -= $vg['out_qty'];
                 $running_value -= $cogs;
+                $settleToQty($running_qty, $running_value, $running_avg);
+
                 $running_qty   += $vg['in_qty'];
                 $running_value += $vg['in_amt'];
 
@@ -109,12 +143,13 @@ class StockStatusModel extends Model {
                 }
             } else {
                 if ($vg['out_qty'] > 0) {
-                    $cogs = $vg['out_qty'] * $running_avg;
+                    $cogs = $costOfIssue($vg['out_qty'], $running_qty, $running_value, $running_avg);
                     if ($trackProfit) {
                         $total_profit += ($vg['out_amt'] - $cogs);
                     }
                     $running_qty   -= $vg['out_qty'];
                     $running_value -= $cogs;
+                    $settleToQty($running_qty, $running_value, $running_avg);
                 }
 
                 if ($vg['in_qty'] > 0) {
@@ -130,6 +165,9 @@ class StockStatusModel extends Model {
                 }
             }
         }
+
+        // A short (negative) balance is not stock either, so it carries no value.
+        $settleToQty($running_qty, $running_value, $running_avg);
 
         return [
             'running_qty'   => $running_qty,

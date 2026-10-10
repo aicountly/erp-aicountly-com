@@ -3680,6 +3680,21 @@ public function update_fy_item_valuation(int $itemId): array
             $running_value = $opVal;
             $running_avg   = $opRate;
 
+            // Value follows quantity, exactly as StockStatusModel::computeValuation() does
+            // it. These two must agree: when they drift, the screen and the opening this
+            // writes disagree about the same stock.
+            $settleToQty = static function (float &$qty, float &$val, float &$avg): void {
+                if ($qty <= 1e-9) {
+                    $qty = ($qty > -1e-9) ? 0.0 : $qty;
+                    $val = 0.0;
+                    $avg = 0.0;
+                }
+            };
+            $costOfIssue = static function (float $outQty, float $qty, float $val, float $avg): float {
+                return ($outQty >= $qty - 1e-9) ? $val : ($outQty * $avg);
+            };
+            $settleToQty($running_qty, $running_value, $running_avg);
+
             SaveErrorLog("UNIT VAL opening | $itmIdUnitId | opQty=$opQty | opVal=$opVal | opRate=$opRate" . PHP_EOL);
 
             // 5) Fetch transactions with voucher info (same as closingStockTotal)
@@ -3729,9 +3744,10 @@ public function update_fy_item_valuation(int $itemId): array
                 $is_stock_journal = (strtolower($vg['voucher_type']) == 'stock journal' || $vg['vch_type_id'] == '20');
 
                 if ($is_stock_journal && $vg['in_qty'] > 0 && $vg['out_qty'] > 0) {
-                    $cogs = $vg['out_qty'] * $running_avg;
+                    $cogs = $costOfIssue($vg['out_qty'], $running_qty, $running_value, $running_avg);
                     $running_qty -= $vg['out_qty'];
                     $running_value -= $cogs;
+                    $settleToQty($running_qty, $running_value, $running_avg);
                     $running_qty += $vg['in_qty'];
                     $running_value += $vg['in_amt'];
                     if ($running_qty > 0) {
@@ -3739,9 +3755,10 @@ public function update_fy_item_valuation(int $itemId): array
                     }
                 } else {
                     if ($vg['out_qty'] > 0) {
-                        $cogs = $vg['out_qty'] * $running_avg;
+                        $cogs = $costOfIssue($vg['out_qty'], $running_qty, $running_value, $running_avg);
                         $running_qty -= $vg['out_qty'];
                         $running_value -= $cogs;
+                        $settleToQty($running_qty, $running_value, $running_avg);
                     }
                     if ($vg['in_qty'] > 0) {
                         $new_total_value = $running_value + $vg['in_amt'];
@@ -3755,7 +3772,15 @@ public function update_fy_item_valuation(int $itemId): array
                 }
             }
 
-            $closingVal = (float)$running_value;
+            // Weighted average: the value is the cost carried by the quantity. Closing with
+            // no quantity means every rupee has been relieved, so carrying a residual into
+            // next year's opening would create stock value that no issue can ever remove -
+            // the average is zero without a quantity, so it would survive each roll-over and
+            // be copied forward again. It is written off in the year it ends, not carried.
+            $closingVal = ($running_qty > 1e-9) ? (float)$running_value : 0.0;
+            if ($running_qty <= 1e-9 && abs((float)$running_value) > 0.005) {
+                SaveErrorLog("UNIT VAL ORPHAN not carried | $itmIdUnitId | closingQty=$running_qty | value written off=" . (float)$running_value . PHP_EOL);
+            }
             SaveErrorLog("UNIT VAL RESULT | $itmIdUnitId | closingVal=$closingVal | closingQty=$running_qty" . PHP_EOL);
 
             // 8) Get method from current FY
